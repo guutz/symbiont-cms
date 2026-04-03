@@ -1,0 +1,100 @@
+{
+	"name": "symbiont-cms",
+	"version": "1.0.0",
+	"packageManager": "pnpm@10.18.1",
+	"description": "A flexible CMS package for SvelteKit apps with Notion and database sync.",
+	"license": "LGPL-3.0-only",
+	"scripts": {
+		"dev": "vite dev",
+		"build": "pnpm run prepack",
+		"preview": "vite preview",
+		"prepare": "svelte-kit sync || echo ''",
+		"prepack": "svelte-kit sync && svelte-package && publint",
+		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
+		"test": "vitest run",
+		"test:watch": "vitest",
+		"test:coverage": "vitest run --coverage"
+	},
+	"files": [
+		"dist",
+		"src",
+		"!dist/**/*.test.*",
+		"!dist/**/*.spec.*",
+		"!src/**/*.test.*",
+		"!src/**/*.spec.*"
+	],
+	"sideEffects": [
+		"**/*.css"
+	],
+	"main": "./dist/index.js",
+	"module": "./dist/index.js",
+	"svelte": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"type": "module",
+	"engines": {
+		"node": ">=18.18.0"
+	},
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"svelte": "./dist/index.js",
+			"default": "./dist/index.js"
+		},
+		"./server": {
+			"types": "./dist/server.d.ts",
+			"default": "./dist/server.js"
+		}
+	},
+	"peerDependencies": {
+		"svelte": "^5.51.2"
+	},
+	"devDependencies": {
+		"@sveltejs/adapter-auto": "^7.0.1",
+		"@sveltejs/kit": "^2.52.0",
+		"@sveltejs/package": "^2.5.7",
+		"@sveltejs/vite-plugin-svelte": "^6.2.4",
+		"@types/markdown-it": "14.1.2",
+		"@types/node": "^25.5.2",
+		"@types/prismjs": "1.26.6",
+		"@vitest/coverage-v8": "4.0.18",
+		"pino-pretty": "^13.1.3",
+		"publint": "^0.3.17",
+		"svelte": "^5.51.2",
+		"svelte-check": "^4.4.0",
+		"typescript": "^5.9.3",
+		"vite": "^7.3.1",
+		"vitest": "4.0.18"
+	},
+	"keywords": [
+		"svelte"
+	],
+	"dependencies": {
+		"@mdit/plugin-abbr": "0.22.2",
+		"@mdit/plugin-attrs": "0.24.2",
+		"@mdit/plugin-embed": "0.24.1",
+		"@mdit/plugin-figure": "0.22.3",
+		"@mdit/plugin-footnote": "0.22.4",
+		"@mdit/plugin-img-lazyload": "0.22.2",
+		"@mdit/plugin-img-size": "0.22.5",
+		"@mdit/plugin-katex": "0.24.2",
+		"@mdit/plugin-mark": "0.22.2",
+		"@mdit/plugin-spoiler": "0.22.3",
+		"@mdit/plugin-sub": "0.23.1",
+		"@mdit/plugin-sup": "0.23.1",
+		"@mdit/plugin-tasklist": "0.22.3",
+		"@notionhq/client": "5.9.0",
+		"@supabase/supabase-js": "^2.101.1",
+		"graphql": "16.12.0",
+		"graphql-request": "7.4.0",
+		"gray-matter": "4.0.3",
+		"katex": "0.16.28",
+		"markdown-it": "14.1.1",
+		"pino": "^10.3.1",
+		"prismjs": "1.30.0",
+		"remark-gfm": "1.0.0",
+		"remark-parse": "9.0.0",
+		"slugify": "1.6.6",
+		"unified": "9.2.2"
+	}
+}

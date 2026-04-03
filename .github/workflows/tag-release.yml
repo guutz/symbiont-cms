@@ -1,0 +1,45 @@
+name: Symbiont Tag Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+      - 'symbiont-v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+          run_install: false
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+      - run: pnpm build
+
+      - name: Create release archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG_NAME="${GITHUB_REF_NAME}"
+          ARCHIVE_NAME="symbiont-cms-${TAG_NAME}.tgz"
+          tar -czf "${ARCHIVE_NAME}" dist src package.json README.md
+          shasum -a 256 "${ARCHIVE_NAME}" > "${ARCHIVE_NAME}.sha256"
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            symbiont-cms-${{ github.ref_name }}.tgz
+            symbiont-cms-${{ github.ref_name }}.tgz.sha256
