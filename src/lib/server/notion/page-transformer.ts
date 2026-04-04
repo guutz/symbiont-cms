@@ -7,6 +7,7 @@ import { DatabasePageCRUD } from '../database/page-crud.js';
 import { createLogger } from '../utils/logger.js';
 import { HookRegistry } from '../../hooks/registry.js';
 import { defaultHooks } from '../../hooks/default-hooks.js';
+import type { Hook } from '../../hooks/types.js';
 
 /**
  * NotionPageToDatabasePageTransformer
@@ -31,7 +32,8 @@ export class NotionPageToDatabasePageTransformer {
 		private config: DatabaseBlueprint,
 		private notionClient: NotionClient,
 		private pageCrud: DatabasePageCRUD,
-		private supabase: SupabaseClient<Database>
+		private supabase: SupabaseClient<Database>,
+		private extraHooks: Hook[] = []
 	) {
 		this.logger = createLogger({
 			operation: 'page_transformer',
@@ -57,10 +59,14 @@ export class NotionPageToDatabasePageTransformer {
 			this.hookRegistry.registerMany(this.config.hooks);
 		}
 
+		if (this.extraHooks.length > 0) {
+			this.hookRegistry.registerMany(this.extraHooks);
+		}
+
 		this.logger.info({
 			event: 'transformer_initialized',
 			totalHooks: this.hookRegistry.getAllHooks().size,
-			hasUserHooks: !!this.config.hooks?.length
+			hasUserHooks: !!this.config.hooks?.length || this.extraHooks.length > 0
 		});
 	}
 	

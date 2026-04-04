@@ -8,6 +8,7 @@ import { NotionClient } from '../notion/client.js';
 import { DatabasePageCRUD } from '../database/page-crud.js';
 import { NotionPageToDatabasePageTransformer } from '../notion/page-transformer.js';
 import { NotionToDatabaseSync } from './notion-to-database-sync.js';
+import type { Hook } from '../../hooks/types.js';
 
 /**
  * Factory function to create a fully-wired NotionToDatabaseSync coordinator
@@ -38,7 +39,8 @@ import { NotionToDatabaseSync } from './notion-to-database-sync.js';
 export function createNotionToDatabaseSyncCoordinator(
 	client: SymbiontClient,
 	config: DatabaseBlueprint,
-	adminSupabase?: SupabaseClient<Database>
+	adminSupabase?: SupabaseClient<Database>,
+	extraHooks: Hook[] = []
 ): NotionToDatabaseSync {
 	const notionToken = requireEnvVar("NOTION_TOKEN");
 
@@ -99,7 +101,8 @@ export function createNotionToDatabaseSyncCoordinator(
 		config,
 		notionClient,
 		pageCrud,
-		supabase
+		supabase,
+		extraHooks
 	);
 
 	const sync = new NotionToDatabaseSync(

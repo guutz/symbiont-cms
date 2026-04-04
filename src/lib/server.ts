@@ -14,6 +14,8 @@ export * from './index.js';
 // Webhook handlers & sync
 export { handlePollBlogRequest, handleNotionWebhookRequest, syncFromNotion } from './server/webhook.js';
 export type { SyncFromNotionResult } from './server/webhook.js';
+export { createSyncClient } from './server/sync-client.js';
+export type { SymbiontSyncClient, SyncHookMap } from './server/sync-client.js';
 
 // Storage cleanup
 export { cleanupUnusedMedia } from './server/bucket/storage-cleanup.js';

@@ -9,8 +9,23 @@ import { Client } from '@notionhq/client';
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from '../database.types.js';
 import { cleanupUnusedMedia, type MediaCleanupResult } from './bucket/storage-cleanup.js';
+import type { Hook } from '../hooks/types.js';
+import type { SymbiontSyncClient } from './sync-client.js';
 
 const CRON_SECRET = requireEnvVar('CRON_SECRET', 'Set CRON_SECRET for authenticating scheduled jobs.');
+
+function resolveHooksForDatabase(client: SymbiontClient, alias: string, dataSourceId: string, explicitHooks?: Hook[]): Hook[] {
+	if (explicitHooks && explicitHooks.length > 0) {
+		return explicitHooks;
+	}
+
+	const syncClient = client as SymbiontSyncClient;
+	if (!syncClient.syncHooksByAlias) {
+		return [];
+	}
+
+	return syncClient.syncHooksByAlias[alias] ?? syncClient.syncHooksByAlias[dataSourceId] ?? [];
+}
 
 export interface SyncFromNotionResult {
 	summaries: SyncResult[];
@@ -39,6 +54,8 @@ export async function syncFromNotion(
 		cleanupDryRun?: boolean;
 		/** Skip syncing and only run media cleanup */
 		cleanupOnly?: boolean;
+		/** Optional user hooks injected only for sync/webhook paths */
+		hooks?: Hook[];
 	} = {}
 ): Promise<SyncFromNotionResult> {
 	const logger = createLogger({ operation: 'sync_from_notion' });
@@ -64,7 +81,8 @@ export async function syncFromNotion(
 	const summaries: SyncResult[] = [];
 	if (!options.cleanupOnly) {
 		for (const dbConfig of dbConfigs) {
-			const sync = createNotionToDatabaseSyncCoordinator(client, dbConfig, adminSupabase);
+			const hooksForDatabase = resolveHooksForDatabase(client, dbConfig.alias, dbConfig.dataSourceId, options.hooks);
+			const sync = createNotionToDatabaseSyncCoordinator(client, dbConfig, adminSupabase, hooksForDatabase);
 			const result = await sync.syncDataSource({
 				since: options.since,
 				syncAll: options.syncAll,
@@ -100,22 +118,35 @@ export async function syncFromNotion(
  * @param client - Symbiont client instance
  * @param event - SvelteKit RequestEvent
  */
-export async function handleNotionWebhookRequest(client: SymbiontClient, event: RequestEvent) {
+export async function handleNotionWebhookRequest(client: SymbiontClient, event: RequestEvent, hooks: Hook[] = []) {
 	const logger = createLogger({ operation: 'webhook' });
 
 	try {
-		const payload = await event.request.json();
+		const providedSecret = event.request.headers.get('x-symbiont-webhook-secret') ?? '';
+		const webhookSecret = requireEnvVar(
+			'NOTION_WEBHOOK_SECRET',
+			'Set NOTION_WEBHOOK_SECRET for authenticating Notion webhooks.'
+		);
 
-		if (payload.event !== 'page.update' || !payload.page?.id || !payload.page.parent?.data_source_id) {
-			logger.debug({ 
-				event: 'webhook_ignored', 
-				reason: 'non_page_update_or_invalid_payload' 
-			});
-			return json({ message: 'Ignoring non-page-update event' }, { status: 200 });
+		if (providedSecret !== webhookSecret) {
+			logger.warn({ event: 'webhook_unauthorized_attempt' });
+			return json({ error: 'Unauthorized' }, { status: 401 });
 		}
 
-		const pageId = payload.page.id;
-		const notionDataSourceId = payload.page.parent.data_source_id;
+		const payload = await event.request.json();
+		const pageId = payload?.data?.id;
+		const notionDataSourceId = payload?.data?.parent?.data_source_id;
+		const isValidAutomationPagePayload = payload?.source?.type === 'automation' && payload?.data?.object === 'page' && pageId && notionDataSourceId;
+
+		if (!isValidAutomationPagePayload) {
+			logger.debug({ 
+				event: 'webhook_ignored', 
+				reason: 'non_automation_page_or_invalid_payload',
+				sourceType: payload?.source?.type,
+				dataObject: payload?.data?.object
+			});
+			return json({ message: 'Ignoring non-page automation payload' }, { status: 200 });
+		}
 
 		// Find database config by dataSourceId (Notion database UUID)
 		const config = client.config;
@@ -144,7 +175,8 @@ export async function handleNotionWebhookRequest(client: SymbiontClient, event: 
 		const page = (await notion.pages.retrieve({ page_id: pageId })) as PageObjectResponse;
 
 		// Create sync coordinator and process page
-		const sync = createNotionToDatabaseSyncCoordinator(client, dbConfig);
+		const hooksForDatabase = resolveHooksForDatabase(client, dbConfig.alias, dbConfig.dataSourceId, hooks);
+		const sync = createNotionToDatabaseSyncCoordinator(client, dbConfig, undefined, hooksForDatabase);
 		await sync.processPage(page);
 
 		logger.info({ event: 'webhook_processed_successfully', pageId });
@@ -165,7 +197,7 @@ export async function handleNotionWebhookRequest(client: SymbiontClient, event: 
  * @param client - Symbiont client instance
  * @param event - SvelteKit RequestEvent
  */
-export async function handlePollBlogRequest(client: SymbiontClient, event: RequestEvent) {
+export async function handlePollBlogRequest(client: SymbiontClient, event: RequestEvent, hooks: Hook[] = []) {
 	const logger = createLogger({ operation: 'poll_sync' });
 
 	try {
@@ -188,7 +220,8 @@ export async function handlePollBlogRequest(client: SymbiontClient, event: Reque
 			limit: limitParam ? parseInt(limitParam, 10) : undefined,
 			cleanupMedia: event.url.searchParams.get('cleanup') === 'true',
 			cleanupDryRun: event.url.searchParams.get('cleanupDryRun') === 'true',
-			cleanupOnly: event.url.searchParams.get('cleanupOnly') === 'true'
+			cleanupOnly: event.url.searchParams.get('cleanupOnly') === 'true',
+			hooks
 		});
 
 		const hasError = result.summaries.some((s) => s.status === 'error');

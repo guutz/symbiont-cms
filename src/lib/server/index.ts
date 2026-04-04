@@ -57,3 +57,7 @@ export { NotionClient } from './notion/client.js';
 
 // Webhook handlers
 export { handleNotionWebhookRequest, handlePollBlogRequest } from './webhook.js';
+
+// Sync client helper
+export { createSyncClient } from './sync-client.js';
+export type { SymbiontSyncClient, SyncHookMap } from './sync-client.js';
