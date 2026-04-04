@@ -1,6 +1,6 @@
 {
 	"name": "symbiont-cms",
-	"version": "1.0.3",
+	"version": "1.0.4",
 	"description": "A flexible CMS package for SvelteKit apps with Notion and database sync.",
 	"license": "LGPL-3.0-only",
 	"scripts": {
