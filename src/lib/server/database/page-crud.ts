@@ -21,6 +21,7 @@ import { createLogger } from '../utils/logger.js';
 export class DatabasePageCRUD {
 	private logger = createLogger({ operation: 'database_page_crud' });
 	private supabase: SupabaseClient<Database>;
+	private static readonly PAGE_ID_CHUNK_SIZE = 500;
 
 	/**
 	 * @param supabase - Supabase client with service role key (admin access)
@@ -51,6 +52,41 @@ export class DatabasePageCRUD {
 		}
 
 		return data as DatabasePage | null;
+	}
+
+	/**
+	 * Get sync reference timestamps for a set of Notion page IDs.
+	 * Uses `last_synced_at` when present, falling back to `updated_at`.
+	 */
+	async getSyncRefsByPageIds(pageIds: string[]): Promise<Map<string, string>> {
+		const refs = new Map<string, string>();
+
+		if (pageIds.length === 0) {
+			return refs;
+		}
+
+		for (let i = 0; i < pageIds.length; i += DatabasePageCRUD.PAGE_ID_CHUNK_SIZE) {
+			const chunk = pageIds.slice(i, i + DatabasePageCRUD.PAGE_ID_CHUNK_SIZE);
+
+			const { data, error } = await this.supabase
+				.from('pages')
+				.select('page_id, last_synced_at, updated_at')
+				.in('page_id', chunk);
+
+			if (error) {
+				this.logger.error({ event: 'query_error', error: error.message });
+				throw new Error(`Failed to get page sync refs: ${error.message}`);
+			}
+
+			for (const row of data ?? []) {
+				const syncRef = row.last_synced_at ?? row.updated_at;
+				if (syncRef) {
+					refs.set(row.page_id, syncRef);
+				}
+			}
+		}
+
+		return refs;
 	}
 
 	/**

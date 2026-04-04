@@ -118,6 +118,7 @@ export class NotionToDatabaseSync {
 			let skipped = 0;
 			let failed = 0;
 			const pagesToProcess = options.limit ? allPages.slice(0, options.limit) : allPages;
+			const existingSyncRefs = await this.pageCrud.getSyncRefsByPageIds(pagesToProcess.map((p) => p.id));
 			
 			if (options.limit && allPages.length > options.limit) {
 				this.logger.info({ 
@@ -130,7 +131,7 @@ export class NotionToDatabaseSync {
 			
 			for (const page of pagesToProcess) {
 				try {
-					const wasProcessed = await this.processPage(page);
+					const wasProcessed = await this.processPage(page, existingSyncRefs.get(page.id));
 					if (wasProcessed) {
 						processed++;
 					} else {
@@ -202,24 +203,25 @@ export class NotionToDatabaseSync {
 	 * Process a single page (used by webhook handler)
 	 * Returns true if page was processed, false if skipped
 	 */
-	async processPage(page: PageObjectResponse): Promise<boolean> {
+	async processPage(page: PageObjectResponse, existingSyncRef?: string): Promise<boolean> {
 		this.logger.debug({ 
 			event: 'process_page_started',
 			pageId: page.id 
 		});
 
 		// 1. Check if page needs updating (compare timestamps)
-		const existingPage = await this.pageCrud.getByNotionPageId(page.id);
+		let syncRef = existingSyncRef;
+		if (!syncRef) {
+			const existingPage = await this.pageCrud.getByNotionPageId(page.id);
+			syncRef = existingPage?.last_synced_at ?? existingPage?.updated_at ?? undefined;
+		}
 
-		if (existingPage && existingPage.updated_at) {
+		if (syncRef) {
 			const notionTime = new Date(page.last_edited_time).getTime();
-			// Use last_synced_at when available: it's stamped after all Notion write-backs
-			// complete, so it's always >= any last_edited_time bump we caused ourselves.
-			const syncRef = (existingPage as any).last_synced_at ?? existingPage.updated_at;
 			const dbTime = new Date(syncRef).getTime();
 			const diff = notionTime - dbTime;
 
-			this.logger.info({ 
+			this.logger.debug({ 
 				event: 'timestamp_comparison',
 				pageId: page.id,
 				notionTime: page.last_edited_time,
@@ -232,11 +234,11 @@ export class NotionToDatabaseSync {
 
 			// Skip if DB is up to date (allowing 10 second tolerance for clock drift)
 			if (dbTime >= notionTime - 10000) {
-				this.logger.info({ 
+				this.logger.debug({ 
 					event: 'page_already_up_to_date',
 					pageId: page.id,
 					notionTime: page.last_edited_time,
-					dbTime: existingPage.updated_at
+					dbTime: syncRef
 				});
 				return false; // Skipped
 			}
@@ -257,7 +259,7 @@ export class NotionToDatabaseSync {
 		// 4. Upsert to database
 		await this.pageCrud.upsert(pageData);
 
-		this.logger.info({ 
+		this.logger.debug({ 
 			event: 'page_processed',
 			pageId: page.id,
 			slug: pageData.slug,
