@@ -152,8 +152,8 @@ export class NotionPageToDatabasePageTransformer {
 			// metadata:summary
 			await this.hookRegistry.execute('metadata:summary', output, page);
 
-			// metadata:custom (merged into output.meta)
-			await this.hookRegistry.execute('metadata:custom', output, page);
+			// metadata:add (merged into output.meta)
+			await this.hookRegistry.execute('metadata:add', output, page);
 
 			// ── Content Pipeline ───────────────────────────────────────
 

@@ -14,8 +14,9 @@ export * from './index.js';
 // Webhook handlers & sync
 export { handlePollBlogRequest, handleNotionWebhookRequest, syncFromNotion } from './server/webhook.js';
 export type { SyncFromNotionResult } from './server/webhook.js';
-export { createSyncClient } from './server/sync-client.js';
-export type { SymbiontSyncClient, SyncHookMap } from './server/sync-client.js';
+export { createSymbiontServer, defineDatabase, resolveSyncDatabase } from './server/sync-client.js';
+export type { SymbiontSyncServer, SyncConfigMap, SyncDatabaseConfig, SyncSlotConfig } from './server/sync-client.js';
+export { on } from './server/hook-sugar.js';
 
 // Storage cleanup
 export { cleanupUnusedMedia } from './server/bucket/storage-cleanup.js';

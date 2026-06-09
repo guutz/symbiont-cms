@@ -59,7 +59,7 @@ export const HOOK_EVENTS = {
 	'metadata:tags': e<string[]>(S.Collect, 'tags'),
 	'metadata:authors': e<string[]>(S.Collect, 'authors'),
 	'metadata:summary': e<string>(S.FirstWins, 'summary'),
-	'metadata:custom': e<Record<string, unknown>>(S.Collect, 'meta'), // merged into output.meta
+	'metadata:add': e<Record<string, unknown>>(S.Collect, 'meta'), // merged into output.meta
 
 	// ── Content Pipeline ───────────────────────────────────────────────
 	'content:preprocess': e<string>(S.FirstWins), // hook fetches content itself (pageToMarkdown); ctx.input unused; no field
@@ -159,15 +159,12 @@ export type HookContext = {
  * Hooks read from `ctx.page` (and optionally `ctx.input`) and return a value or `null`.
  * - Return your value if you have data to contribute
  * - Return `null` if you have nothing to contribute (continues to next hook)
- * - Return `false` (FirstWins events only) to stop the chain and produce a null result —
- *   meaning "my definitive answer is nothing", not "I don't know". Downstream hooks are
- *   skipped and the output field is left unset (null).
  * 
  * The registry composes results based on the event's composition strategy.
  */
 export type HookFunction<TOutput = any> = (
 	context: HookContext
-) => Promise<TOutput | null | false> | TOutput | null | false;
+) => Promise<TOutput | null> | TOutput | null;
 
 /**
  * Hook definition.

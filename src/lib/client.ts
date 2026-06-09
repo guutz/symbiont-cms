@@ -71,9 +71,7 @@ export interface SymbiontClient {
  *   databases: [
  *     {
  *       alias: 'blog',
- *       dataSourceId: 'your-notion-database-uuid',
- *       isPublicRule: (page) => page.properties.Public?.checkbox,
- *       publishDateRule: (page) => page.properties['Publish Date']?.date?.start
+ *       dataSourceId: 'your-notion-database-uuid'
  *     }
  *   ]
  * });

@@ -192,19 +192,19 @@ describe('HookRegistry (Extractor Pattern)', () => {
 			const hooks: Hook<Record<string, any>>[] = [
 				{
 					name: 'hook1',
-					event: 'metadata:custom',
+					event: 'metadata:add',
 					priority: 'override',
 					fn: async () => ({ field1: 'value1' }) // No spreading needed!
 				},
 				{
 					name: 'hook2',
-					event: 'metadata:custom',
+					event: 'metadata:add',
 					priority: 'override',
 					fn: async () => ({ field2: 'value2' }) // No ctx.data!
 				},
 				{
 					name: 'hook3',
-					event: 'metadata:custom',
+					event: 'metadata:add',
 					
 					fn: async () => ({ field3: 'value3' })
 				}
@@ -212,7 +212,7 @@ describe('HookRegistry (Extractor Pattern)', () => {
 
 			registry.registerMany(hooks);
 
-			const result = await registry.execute('metadata:custom', {}, {} as any);
+			const result = await registry.execute('metadata:add', {}, {} as any);
 
 			expect(result).toEqual({
 				field1: 'value1',
@@ -225,19 +225,19 @@ describe('HookRegistry (Extractor Pattern)', () => {
 			const hooks: Hook<Record<string, any> | null>[] = [
 				{
 					name: 'hook1',
-					event: 'metadata:custom',
+					event: 'metadata:add',
 					priority: 'override',
 					fn: async () => ({ field1: 'value1' })
 				},
 				{
 					name: 'hook2',
-					event: 'metadata:custom',
+					event: 'metadata:add',
 					priority: 'override',
 					fn: async () => null // Skipped
 				},
 				{
 					name: 'hook3',
-					event: 'metadata:custom',
+					event: 'metadata:add',
 					
 					fn: async () => ({ field3: 'value3' })
 				}
@@ -245,7 +245,7 @@ describe('HookRegistry (Extractor Pattern)', () => {
 
 			registry.registerMany(hooks);
 
-			const result = await registry.execute('metadata:custom', {}, {} as any);
+			const result = await registry.execute('metadata:add', {}, {} as any);
 
 			expect(result).toEqual({
 				field1: 'value1',
@@ -257,13 +257,13 @@ describe('HookRegistry (Extractor Pattern)', () => {
 			const hooks: Hook<Record<string, any>>[] = [
 				{
 					name: 'hook1',
-					event: 'metadata:custom',
+					event: 'metadata:add',
 					priority: 'override',
 					fn: async () => ({ field: 'first' })
 				},
 				{
 					name: 'hook2',
-					event: 'metadata:custom',
+					event: 'metadata:add',
 					
 					fn: async () => ({ field: 'second' }) // Overwrites
 				}
@@ -271,7 +271,7 @@ describe('HookRegistry (Extractor Pattern)', () => {
 
 			registry.registerMany(hooks);
 
-			const result = await registry.execute('metadata:custom', {}, {} as any);
+			const result = await registry.execute('metadata:add', {}, {} as any);
 
 			expect(result).toEqual({ field: 'second' });
 		});

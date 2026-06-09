@@ -9,7 +9,7 @@ import { getPropertyNamedValue, getPropertyPlainText } from '../server/notion/pr
  * Default hooks implementing Symbiont's opinionated behavior.
  * Aligned with design memo (2026-02-21-hook-events-design-memo.md).
  * 
- * All hooks use default priority (50) unless specified.
+ * All hooks use default priority unless specified.
  */
 
 // ── Page Lifecycle ─────────────────────────────────────────────────
@@ -47,74 +47,79 @@ export const defaultPageAfterHook: Hook<void> = {
  * Cache for Notion database schema lookups (per sync run).
  * Key: dataSourceId, Value: status property definition
  */
-const databaseSchemaCache = new Map<string, any>();
+// const databaseSchemaCache = new Map<string, any>();
 
 export const defaultPublishCheckHook: Hook<boolean> = {
 	name: 'symbiont:publish:check',
 	event: 'publish:check',
 	fn: async (ctx) => {
-		const notionClient = ctx.services.notionClient;
-		if (!notionClient) {
-			// No Notion client available - abstain and let custom hooks vote.
-			return null;
-		}
+		// by default all pages are published
+		return true;
 
-		const dataSourceId = ctx.config.dataSourceId;
+		// This was going to be the default behavior, check if the page is under a 'Complete' Status property.
+		// But given that the publish check is now a boolean AND across all hooks, this would be too opinionated and would prevent users from implementing their own publish logic based on other criteria.
+		// const notionClient = ctx.services.notionClient;
+		// if (!notionClient) {
+		// 	// No Notion client available - abstain and let custom hooks vote.
+		// 	return null;
+		// }
+
+		// const dataSourceId = ctx.config.dataSourceId;
 		
-		// Check cache first
-		if (!databaseSchemaCache.has(dataSourceId)) {
-			try {
-				// Fetch database schema
-				const dbSchema = await notionClient.getDatabaseSchema(dataSourceId);
-				databaseSchemaCache.set(dataSourceId, dbSchema);
-			} catch (error) {
-				ctx.logger.warn({
-					event: 'publish_check_schema_fetch_failed',
-					dataSourceId,
-					error: error instanceof Error ? error.message : String(error)
-				});
-				// If schema can't be fetched, abstain and let custom hooks vote.
-				return null;
-			}
-		}
+		// // Check cache first
+		// if (!databaseSchemaCache.has(dataSourceId)) {
+		// 	try {
+		// 		// Fetch database schema
+		// 		const dbSchema = await notionClient.getDatabaseSchema(dataSourceId);
+		// 		databaseSchemaCache.set(dataSourceId, dbSchema);
+		// 	} catch (error) {
+		// 		ctx.logger.warn({
+		// 			event: 'publish_check_schema_fetch_failed',
+		// 			dataSourceId,
+		// 			error: error instanceof Error ? error.message : String(error)
+		// 		});
+		// 		// If schema can't be fetched, abstain and let custom hooks vote.
+		// 		return null;
+		// 	}
+		// }
 
-		const dbSchema = databaseSchemaCache.get(dataSourceId);
+		// const dbSchema = databaseSchemaCache.get(dataSourceId);
 		
-		// Find Status property
-		const statusProp = Object.entries(dbSchema?.properties || {}).find(
-			([name, prop]: [string, any]) => prop.type === 'status'
-		);
+		// // Find Status property
+		// const statusProp = Object.entries(dbSchema?.properties || {}).find(
+		// 	([name, prop]: [string, any]) => prop.type === 'status'
+		// );
 
-		if (!statusProp) {
-			// No status property - abstain and let custom hooks vote.
-			return null;
-		}
+		// if (!statusProp) {
+		// 	// No status property - abstain and let custom hooks vote.
+		// 	return null;
+		// }
 
-		const [statusPropName, statusPropDef] = statusProp as [string, any];
+		// const [statusPropName, statusPropDef] = statusProp as [string, any];
 		
-		// Find the 'Complete' group
-		const completeGroup = statusPropDef.status?.groups?.find(
-			(group: any) => group.name === 'Complete'
-		);
+		// // Find the 'Complete' group
+		// const completeGroup = statusPropDef.status?.groups?.find(
+		// 	(group: any) => group.name === 'Complete'
+		// );
 
-		if (!completeGroup) {
-			// No Complete group - abstain and let custom hooks vote.
-			return null;
-		}
+		// if (!completeGroup) {
+		// 	// No Complete group - abstain and let custom hooks vote.
+		// 	return null;
+		// }
 
-		// Check if page's status option is in the Complete group
-		const pageStatusProp = ctx.page.properties[statusPropName];
-		if (!pageStatusProp || !('status' in pageStatusProp)) {
-			return false;
-		}
+		// // Check if page's status option is in the Complete group
+		// const pageStatusProp = ctx.page.properties[statusPropName];
+		// if (!pageStatusProp || !('status' in pageStatusProp)) {
+		// 	return false;
+		// }
 
-		const pageStatusId = (pageStatusProp as any).status?.id;
-		if (!pageStatusId) {
-			return false;
-		}
+		// const pageStatusId = (pageStatusProp as any).status?.id;
+		// if (!pageStatusId) {
+		// 	return false;
+		// }
 
-		const isComplete = completeGroup.option_ids?.includes(pageStatusId);
-		return isComplete || false;
+		// const isComplete = completeGroup.option_ids?.includes(pageStatusId);
+		// return isComplete || false;
 	}
 };
 
@@ -383,8 +388,8 @@ export const defaultSummaryExtractHook: Hook<string> = {
 };
 
 export const defaultCustomMetadataHook: Hook<Record<string, unknown>> = {
-	name: 'symbiont:metadata:custom',
-	event: 'metadata:custom',
+	name: 'symbiont:metadata:add',
+	event: 'metadata:add',
 	fn: async (ctx) => {
 		// Return empty object by default (other hooks can add fields)
 		return {};

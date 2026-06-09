@@ -353,8 +353,8 @@ describe('Default Hooks (Extractor Pattern)', () => {
 		});
 
 		it('should have correct metadata', () => {
-			expect(defaultCustomMetadataHook.name).toBe('symbiont:metadata:custom');
-			expect(defaultCustomMetadataHook.event).toBe('metadata:custom');
+			expect(defaultCustomMetadataHook.name).toBe('symbiont:metadata:add');
+			expect(defaultCustomMetadataHook.event).toBe('metadata:add');
 			// Priority is undefined (default level) for built-in hooks
 		});
 	});

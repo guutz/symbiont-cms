@@ -10,22 +10,9 @@ import { createClient } from '@supabase/supabase-js';
 import type { Database } from '../database.types.js';
 import { cleanupUnusedMedia, type MediaCleanupResult } from './bucket/storage-cleanup.js';
 import type { Hook } from '../hooks/types.js';
-import type { SymbiontSyncClient } from './sync-client.js';
+import { resolveSyncDatabase } from './sync-client.js';
 
 const CRON_SECRET = requireEnvVar('CRON_SECRET', 'Set CRON_SECRET for authenticating scheduled jobs.');
-
-function resolveHooksForDatabase(client: SymbiontClient, alias: string, dataSourceId: string, explicitHooks?: Hook[]): Hook[] {
-	if (explicitHooks && explicitHooks.length > 0) {
-		return explicitHooks;
-	}
-
-	const syncClient = client as SymbiontSyncClient;
-	if (!syncClient.syncHooksByAlias) {
-		return [];
-	}
-
-	return syncClient.syncHooksByAlias[alias] ?? syncClient.syncHooksByAlias[dataSourceId] ?? [];
-}
 
 export interface SyncFromNotionResult {
 	summaries: SyncResult[];
@@ -80,9 +67,12 @@ export async function syncFromNotion(
 	// Sync each database (skipped when cleanupOnly)
 	const summaries: SyncResult[] = [];
 	if (!options.cleanupOnly) {
-		for (const dbConfig of dbConfigs) {
-			const hooksForDatabase = resolveHooksForDatabase(client, dbConfig.alias, dbConfig.dataSourceId, options.hooks);
-			const sync = createNotionToDatabaseSyncCoordinator(client, dbConfig, adminSupabase, hooksForDatabase);
+		for (const db of dbConfigs) {
+			const resolved = resolveSyncDatabase(client, db);
+			const hooksForDatabase = options.hooks && options.hooks.length > 0
+				? options.hooks
+				: resolved.hooks;
+			const sync = createNotionToDatabaseSyncCoordinator(client, resolved.config, adminSupabase, hooksForDatabase);
 			const result = await sync.syncDataSource({
 				since: options.since,
 				syncAll: options.syncAll,
@@ -150,9 +140,9 @@ export async function handleNotionWebhookRequest(client: SymbiontClient, event: 
 
 		// Find database config by dataSourceId (Notion database UUID)
 		const config = client.config;
-		const dbConfig = config.databases.find((db: any) => db.dataSourceId === notionDataSourceId);
+		const queryDbConfig = config.databases.find((db: any) => db.dataSourceId === notionDataSourceId);
 
-		if (!dbConfig) {
+		if (!queryDbConfig) {
 			logger.warn({ 
 				event: 'webhook_database_not_found', 
 				notionDataSourceId 
@@ -163,8 +153,8 @@ export async function handleNotionWebhookRequest(client: SymbiontClient, event: 
 		logger.info({ 
 			event: 'webhook_received', 
 			pageId, 
-			alias: dbConfig.alias,
-			dataSourceId: dbConfig.dataSourceId 
+			alias: queryDbConfig.alias,
+			dataSourceId: queryDbConfig.dataSourceId 
 		});
 
 		// Get Notion token from environment
@@ -175,8 +165,9 @@ export async function handleNotionWebhookRequest(client: SymbiontClient, event: 
 		const page = (await notion.pages.retrieve({ page_id: pageId })) as PageObjectResponse;
 
 		// Create sync coordinator and process page
-		const hooksForDatabase = resolveHooksForDatabase(client, dbConfig.alias, dbConfig.dataSourceId, hooks);
-		const sync = createNotionToDatabaseSyncCoordinator(client, dbConfig, undefined, hooksForDatabase);
+		const resolved = resolveSyncDatabase(client, queryDbConfig);
+		const hooksForDatabase = hooks.length > 0 ? hooks : resolved.hooks;
+		const sync = createNotionToDatabaseSyncCoordinator(client, resolved.config, undefined, hooksForDatabase);
 		await sync.processPage(page);
 
 		logger.info({ event: 'webhook_processed_successfully', pageId });

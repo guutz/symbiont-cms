@@ -24,7 +24,7 @@ pnpm add github:guutz/symbiont-cms#v1.0.0
 
 ## Quick start
 
-Create a client once in your app.
+Create a query client once in your app.
 
 ```ts
 // src/lib/symbiont.ts
@@ -62,8 +62,40 @@ Use sync handlers in API routes.
 // src/routes/api/sync/+server.ts
 import { handlePollBlogRequest } from 'symbiont-cms/server';
 import { symbiont } from '$lib/symbiont';
+import { symbiontSync } from '$lib/symbiont.server';
 
-export const GET = (event) => handlePollBlogRequest(symbiont, event);
+export const GET = (event) => handlePollBlogRequest(symbiontSync, event);
+```
+
+Define sync behavior separately (slot-first config + hook sugar escape hatch).
+
+```ts
+// src/lib/symbiont.server.ts
+import { createSymbiontServer, on } from 'symbiont-cms/server';
+import { symbiont } from './symbiont.js';
+
+export const symbiontSync = createSymbiontServer(symbiont, {
+  blog: {
+    slugProperty: 'Slug',
+    tagsProperty: 'Tags',
+    authorsProperty: 'Authors',
+    summaryProperty: 'Summary',
+    coverProperty: 'Cover',
+
+    shouldSync: (ctx) => ctx.page.archived !== true,
+    isPublished: (ctx) => ctx.page.properties.Status?.status?.name === 'Published',
+    publishDate: (ctx) => ctx.page.properties['Publish Date']?.date?.start ?? null,
+    addMetadata: () => ({ siteSection: 'blog' }),
+    transformContent: (ctx) => ctx.input,
+
+    hooks: [
+      on('content:sync', async (ctx) => {
+        ctx.logger.debug({ event: 'content_synced', pageId: ctx.page.id });
+        return null;
+      }, { name: 'blog:content-sync-log', priority: 'after' })
+    ]
+  }
+});
 ```
 
 ## Minimal sample config
@@ -89,7 +121,7 @@ export const symbiont = createSymbiontClient({
 Symbiont does not auto-load an external config file when creating a client.
 The intended path is to call `createSymbiontClient(...)` in `src/lib/symbiont.ts` and export that singleton.
 
-## Full sample config (all options)
+## Full sample config (query + sync)
 
 ```ts
 // src/lib/symbiont.ts
@@ -103,56 +135,8 @@ export const symbiont = createSymbiontClient({
 
   databases: [
     {
-      // Required
       alias: 'blog',
-      dataSourceId: process.env.NOTION_DATABASE_ID!,
-
-      // Hook pipeline
-      hooks: [
-        {
-          name: 'custom:publish-check',
-          event: 'publish:check',
-          priority: 'before', // 'before' | 'after' | 'override' | 'fallback'
-          continueOnError: false,
-          fn: async (ctx) => {
-            const status = ctx.page.properties?.Status?.status?.name;
-            return status === 'Published';
-          }
-        }
-      ],
-
-      // Slug behavior
-      slugProperty: 'Slug',
-      onSlugConflict: 'auto-rename', // 'auto-rename' | 'error' | 'use-page-id'
-
-      // Lifecycle
-      onBeforeSync: async () => {
-        // optional per-datasource setup
-      },
-      onAfterSync: async () => {
-        // optional per-datasource cleanup
-      },
-
-      // Metadata mappings
-      tagsProperty: 'Tags',
-      authorsProperty: 'Authors',
-      summaryProperty: 'Summary',
-      coverProperty: 'Cover',
-
-      // Content source behavior
-      contentSourceRule: 'NOTION', // 'NOTION' | 'WEB_EDITOR' | (page) => ...
-
-      // Notion write-back strategy
-      syncStrategy: 'patch', // 'patch' | 'replace'
-      forceFullReplaceThreshold: 0.6,
-
-      // Write-back controls
-      syncBackToNotion: {
-        content: true,
-        properties: true
-      }
-      // You can also use a boolean:
-      // syncBackToNotion: true
+      dataSourceId: process.env.NOTION_DATABASE_ID!
     }
   ],
 
@@ -187,12 +171,66 @@ export const symbiont = createSymbiontClient({
     }
   }
 });
+
+// src/lib/symbiont.server.ts
+import { createSymbiontServer } from 'symbiont-cms/server';
+import { symbiont } from './symbiont.js';
+
+export const symbiontSync = createSymbiontServer(symbiont, {
+  blog: {
+    // Slug behavior
+    slugProperty: 'Slug',
+    onSlugConflict: 'auto-rename',
+
+    // Lifecycle
+    onBeforeSync: async () => {},
+    onAfterSync: async () => {},
+
+    // Metadata mappings
+    tagsProperty: 'Tags',
+    authorsProperty: 'Authors',
+    summaryProperty: 'Summary',
+    coverProperty: 'Cover',
+
+    // Content source behavior
+    contentSourceRule: 'NOTION',
+
+    // Notion write-back strategy
+    syncStrategy: 'patch',
+    forceFullReplaceThreshold: 0.6,
+    syncBackToNotion: { content: true, properties: true },
+
+    // Named slots (hook sugar)
+    shouldSync: () => true,
+    isPublished: (ctx) => ctx.page.properties.Status?.status?.name === 'Published',
+    publishDate: (ctx) => ctx.page.last_edited_time,
+    addMetadata: () => ({}),
+    transformContent: (ctx) => ctx.input,
+
+    // Escape hatch
+    hooks: []
+  }
+});
 ```
 
 ## Exports
 
 - `symbiont-cms`: client APIs, types, optional Svelte components
 - `symbiont-cms/server`: sync handlers and server-only utilities
+
+## Migration (Major)
+
+This release intentionally introduces breaking API changes.
+
+- `createSymbiontClient(...).databases` is now query-only:
+  - keep `alias` + `dataSourceId`
+  - move sync behavior to `createSymbiontServer(...)`
+- `createSymbiontServer` now accepts `SyncConfigMap` (slot-first), not `Record<string, Hook[]>`
+- Prefer named slots for common behavior:
+  - `shouldSync`, `isPublished`, `publishDate`, `addMetadata`, `transformContent`
+- Use `hooks` as the event-level escape hatch for side effects and uncommon events
+- Slot + hook on the same underlying event is disallowed and throws at config resolution
+- Use `on(EVENTS.someEvent, fn)` for typed hook sugar when writing custom hooks
 
 ## Development
 

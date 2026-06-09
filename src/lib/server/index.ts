@@ -59,5 +59,9 @@ export { NotionClient } from './notion/client.js';
 export { handleNotionWebhookRequest, handlePollBlogRequest } from './webhook.js';
 
 // Sync client helper
-export { createSyncClient } from './sync-client.js';
-export type { SymbiontSyncClient, SyncHookMap } from './sync-client.js';
+export { createSymbiontServer } from './sync-client.js';
+export { defineDatabase, resolveSyncDatabase } from './sync-client.js';
+export type { SymbiontSyncServer, SyncConfigMap, SyncDatabaseConfig, SyncSlotConfig } from './sync-client.js';
+
+// Hook sugar
+export { on } from './hook-sugar.js';
