@@ -16,6 +16,7 @@
 
 import { createHash } from 'crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { imageSize } from 'image-size';
 
 export interface UploadImageOptions {
 	supabase: SupabaseClient;
@@ -102,12 +103,60 @@ export async function uploadImageToSupabase(
 	const ext = getExtensionFromUrl(url) || 'jpg';
 	const filename = `${hash}.${ext}`;
 
+	/**
+	 * Record pixel dimensions so consumers can reserve layout space and avoid CLS.
+	 *
+	 * Runs on the already-in-storage path too: images uploaded before
+	 * image_metadata existed have no row, and only re-deriving them here keeps a
+	 * separate backfill script from being permanently necessary.
+	 *
+	 * Best-effort by design. `imageSize` throws on formats it cannot parse (SVG
+	 * among them), and a missing dimension row degrades to no aspect-ratio hint.
+	 * That must never fail the upload.
+	 */
+	async function recordDimensions(): Promise<void> {
+		let width: number | undefined;
+		let height: number | undefined;
+
+		try {
+			const dimensions = imageSize(buffer);
+			width = dimensions.width;
+			height = dimensions.height;
+		} catch (err) {
+			console.warn(
+				`  ! Could not read dimensions for ${filename} (${contentType}):`,
+				err instanceof Error ? err.message : err
+			);
+			return;
+		}
+
+		// The table has CHECK (width > 0) / CHECK (height > 0).
+		if (!width || !height || width <= 0 || height <= 0) {
+			console.warn(`  ! Skipping dimension record for ${filename}: got ${width}x${height}`);
+			return;
+		}
+
+		const { error: upsertError } = await supabase
+			.from('image_metadata')
+			.upsert(
+				{ bucket_id: 'media', object_path: filename, width, height },
+				// PostgREST wants a bare comma-separated column list; a space here
+				// makes it look for a column named " object_path".
+				{ onConflict: 'bucket_id,object_path' }
+			);
+
+		if (upsertError) {
+			console.warn(`  ✗ Failed to upsert dimensions for ${filename}:`, upsertError.message);
+		}
+	}
+
 	// File with this content already in storage — skip upload.
 	const { data: existingFiles } = await supabase.storage
 		.from('media')
 		.list('', { search: filename, limit: 1 });
 
 	if (existingFiles && existingFiles.length > 0) {
+		await recordDimensions();
 		const { data } = supabase.storage.from('media').getPublicUrl(filename);
 		return { originalUrl: url, newUrl: data.publicUrl, path: filename, filename };
 	}
@@ -124,6 +173,8 @@ export async function uploadImageToSupabase(
 	if (error) {
 		throw new Error(`Upload failed: ${error.message}`);
 	}
+
+	await recordDimensions();
 
 	const { data } = supabase.storage.from('media').getPublicUrl(filename);
 	return { originalUrl: url, newUrl: data.publicUrl, path: filename, filename };

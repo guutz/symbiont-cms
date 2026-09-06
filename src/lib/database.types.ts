@@ -12,8 +12,66 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.1"
   }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
+      image_metadata: {
+        Row: {
+          bucket_id: string
+          created_at: string
+          height: number
+          id: number
+          object_path: string
+          storage_object_id: string | null
+          updated_at: string
+          width: number
+        }
+        Insert: {
+          bucket_id: string
+          created_at?: string
+          height: number
+          id?: never
+          object_path: string
+          storage_object_id?: string | null
+          updated_at?: string
+          width: number
+        }
+        Update: {
+          bucket_id?: string
+          created_at?: string
+          height?: number
+          id?: never
+          object_path?: string
+          storage_object_id?: string | null
+          updated_at?: string
+          width?: number
+        }
+        Relationships: []
+      }
       pages: {
         Row: {
           authors: Json | null
@@ -25,6 +83,7 @@ export type Database = {
           meta: Json | null
           page_id: string
           publish_at: string | null
+          search_fts: unknown
           slug: string | null
           summary: string | null
           tags: Json | null
@@ -41,6 +100,7 @@ export type Database = {
           meta?: Json | null
           page_id: string
           publish_at?: string | null
+          search_fts?: unknown
           slug?: string | null
           summary?: string | null
           tags?: Json | null
@@ -57,6 +117,7 @@ export type Database = {
           meta?: Json | null
           page_id?: string
           publish_at?: string | null
+          search_fts?: unknown
           slug?: string | null
           summary?: string | null
           tags?: Json | null
@@ -67,10 +128,53 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      homepage: {
+        Row: {
+          authors: Json | null
+          cover: string | null
+          cover_height: number | null
+          cover_width: number | null
+          datasource_alias: string | null
+          datasource_id: string | null
+          last_synced_at: string | null
+          meta: Json | null
+          page_id: string | null
+          publish_at: string | null
+          search_fts: unknown
+          slug: string | null
+          summary: string | null
+          tags: Json | null
+          title: string | null
+          updated_at: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
-      [_ in never]: never
+      list_storage_objects_recursive: {
+        Args: {
+          p_after_name?: string
+          p_bucket_id: string
+          p_limit?: number
+          p_prefix?: string
+        }
+        Returns: {
+          bucket_id: string
+          created_at: string
+          id: string
+          last_accessed_at: string
+          metadata: Json
+          name: string
+          owner: string
+          updated_at: string
+        }[]
+      }
+      list_unique_tags: {
+        Args: { p_datasource_alias: string }
+        Returns: {
+          tag: string
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never
@@ -199,6 +303,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {},
   },

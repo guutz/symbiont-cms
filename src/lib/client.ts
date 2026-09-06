@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import type { SymbiontConfig, WebsitePage } from './types.js';
+import type { SymbiontConfig, DatabasePage } from './types.js';
 import type { Database } from './database.types.js';
 
 const PAGES_TABLE = 'pages';
@@ -44,12 +44,14 @@ export interface SymbiontClient {
 	
 	/** Supabase client instance (public/anon key for read-only queries) */
 	supabase: SupabaseClient<Database>;
+
+	getSSRClient(fetch?: typeof globalThis.fetch, supabaseKey?: string): SupabaseClient<Database>;
 	
 	/** Fetch a single page by slug */
-	getPageBySlug(slug: string, options?: GetPageOptions): Promise<WebsitePage | null>;
+	getPageBySlug(slug: string, options?: GetPageOptions): Promise<DatabasePage | null>;
 	
 	/** Fetch all pages for a database */
-	getAllPages(options?: GetAllPagesOptions): Promise<WebsitePage[]>;
+	getAllPages(options?: GetAllPagesOptions): Promise<DatabasePage[]>;
 }
 
 /**
@@ -115,13 +117,13 @@ export function createSymbiontClient(config: SymbiontConfig): SymbiontClient {
 	/**
 	 * Create a Supabase client with optional custom fetch for SSR
 	 */
-	function getClient(customFetch?: typeof globalThis.fetch): SupabaseClient<Database> {
-		if (!customFetch) return supabase;
+	function getClient(customFetch?: typeof globalThis.fetch, supabaseKey?: string): SupabaseClient<Database> {
+		if (!customFetch && !supabaseKey) return supabase;
 		
 		// Create a new client with custom fetch for SSR
 		return createClient<Database>(
 			config.supabase.url,
-			config.supabase.publishableKey,
+			supabaseKey ?? config.supabase.publishableKey,
 			{
 				global: { fetch: customFetch },
 				auth: {
@@ -136,8 +138,8 @@ export function createSymbiontClient(config: SymbiontConfig): SymbiontClient {
 	return {
 		config,
 		supabase,
-		
-		async getPageBySlug(slug: string, options: GetPageOptions = {}): Promise<WebsitePage | null> {
+		getSSRClient: getClient,
+		async getPageBySlug(slug: string, options: GetPageOptions = {}): Promise<DatabasePage | null> {
 			const client = getClient(options.fetch);
 			const sourceAlias = resolveAlias(options.alias);
 			
@@ -151,10 +153,10 @@ export function createSymbiontClient(config: SymbiontConfig): SymbiontClient {
 				throw new Error(`Query error: ${error.message}`);
 			}
 			
-			return data as WebsitePage | null;
+			return data as DatabasePage | null;
 		},
 		
-		async getAllPages(options: GetAllPagesOptions = {}): Promise<WebsitePage[]> {
+		async getAllPages(options: GetAllPagesOptions = {}): Promise<DatabasePage[]> {
 			const client = getClient(options.fetch);
 			const sourceAlias = resolveAlias(options.alias);
 			
@@ -171,7 +173,7 @@ export function createSymbiontClient(config: SymbiontConfig): SymbiontClient {
 				throw new Error(`Query error: ${error.message}`);
 			}
 			
-			return data as WebsitePage[];
+			return data as DatabasePage[];
 		}
 	};
 }

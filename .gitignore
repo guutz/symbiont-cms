@@ -3,6 +3,14 @@ node_modules/
 package-lock.json
 
 # build outputs
+#
+# dist/ stays ignored for day-to-day work, but MUST be present in release tags:
+# package.json's `exports` all point at ./dist/*, and consumers install this
+# package straight from a GitHub tag. A tag without dist/ installs "successfully"
+# and is then unimportable.
+#
+# scripts/release.sh force-adds it at tag time (`git add -f dist`). Do not tag by
+# hand -- that is how v1.1.1 shipped broken.
 dist/
 .svelte-kit/
 build/

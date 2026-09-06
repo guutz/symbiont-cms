@@ -84,29 +84,6 @@ export interface DatabasePage extends Omit<DatabasePageRaw, 'tags' | 'authors' |
 }
 
 /**
- * Enhanced page structure for website rendering.
- * Extends DatabasePage with computed/rendered fields for UI consumption.
- * This is the "sugared-up" version sent to +page.svelte components.
- * 
- * Extended to be compatible with QWER post type for seamless integration.
- */
-export interface WebsitePage extends Omit<DatabasePage, 'page_id' | 'datasource_id' | 'datasource_alias' | 'updated_at'> {
-    // Make database fields optional for flexibility
-    page_id?: string;
-    datasource_id?: string;
-    datasource_alias?: string;
-    updated_at?: string | null;
-
-    /** Pre-rendered HTML from summary markdown (populated by postsLoad) */
-    summary_html?: string;
-    description?: string;
-    language?: string;
-
-    // Allow any other properties from your schema
-    [key: string]: any;
-}
-
-/**
  * Database configuration blueprint.
  * Contains both public data (alias) and private server-only data (dataSourceId, notionToken, rules).
  * Used in symbiont config.
