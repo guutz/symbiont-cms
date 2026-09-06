@@ -13,7 +13,7 @@
  * issues/2024-10-21.pdf) bypasses this scheme and uses the caller-specified
  * path directly.
  */
-import { createHash } from 'crypto';
+import { createHash } from 'node:crypto';
 import { imageSize } from 'image-size';
 /**
  * Detect if a URL needs to be uploaded to Supabase Storage

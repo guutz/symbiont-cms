@@ -10,11 +10,6 @@
  * logger.error({ event: 'sync_failed', error: err.message });
  */
 import pino from 'pino';
-/**
- * Base Pino logger instance
- * - In development: pretty-printed colored output
- * - In production: JSON output for log aggregators
- */
 export declare const baseLogger: pino.Logger<never, boolean>;
 /**
  * Context for scoped loggers

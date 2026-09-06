@@ -15,31 +15,72 @@ import { readEnvVar } from './env.js';
 
 // Default log level (can be overridden by LOG_LEVEL env var)
 const LOG_LEVEL = readEnvVar('LOG_LEVEL') || 'info';
-const NODE_ENV = readEnvVar('NODE_ENV') || 'development';
 
 /**
- * Base Pino logger instance
- * - In development: pretty-printed colored output
- * - In production: JSON output for log aggregators
+ * Defaults to 'production', NOT 'development'.
+ *
+ * It used to default to 'development', which made the pino-pretty transport the
+ * default rather than the exception. `pino-pretty` is only a devDependency here,
+ * so in any context that does not set NODE_ENV -- a tsx script, a test runner, a
+ * fresh consumer install -- constructing the logger threw at module load:
+ *
+ *   unable to determine transport target for "pino-pretty"
+ *
+ * And because server.ts re-exports this module, that broke importing *anything*
+ * from `symbiont-cms/server`. Consumers were papering over it by adding
+ * pino-pretty to their own dependencies.
+ *
+ * Plain JSON logging works everywhere, so it is the correct default. `vite dev`
+ * sets NODE_ENV=development, so local development still gets pretty output.
  */
-export const baseLogger = pino({
-	level: LOG_LEVEL,
-	...(NODE_ENV === 'development' && {
-		transport: {
-			target: 'pino-pretty',
-			options: {
-				colorize: true,
-				translateTime: 'HH:MM:ss',
-				ignore: 'pid,hostname',
-				singleLine: false
-			}
+const NODE_ENV = readEnvVar('NODE_ENV') || 'production';
+
+/**
+ * Base Pino logger instance.
+ * - development, with pino-pretty available: pretty-printed colored output
+ * - otherwise: JSON output for log aggregators
+ *
+ * `pino-pretty` is an OPTIONAL runtime dependency. It is not listed in
+ * `dependencies` on purpose -- shipping a development pretty-printer to every
+ * consumer's production bundle is not worth it -- so the transport is attempted
+ * defensively and degrades to JSON if the package is not installed. Never let
+ * logging configuration break module import.
+ */
+function createBaseLogger(): pino.Logger {
+	const baseOptions: pino.LoggerOptions = {
+		level: LOG_LEVEL,
+		base: {
+			service: 'symbiont-cms',
+			env: NODE_ENV
 		}
-	}),
-	base: {
-		service: 'symbiont-cms',
-		env: NODE_ENV
+	};
+
+	if (NODE_ENV !== 'development') {
+		return pino(baseOptions);
 	}
-});
+
+	try {
+		return pino({
+			...baseOptions,
+			transport: {
+				target: 'pino-pretty',
+				options: {
+					colorize: true,
+					translateTime: 'HH:MM:ss',
+					ignore: 'pid,hostname',
+					singleLine: false
+				}
+			}
+		});
+	} catch {
+		// pino-pretty not installed. Fall back rather than taking down the import.
+		const fallback = pino(baseOptions);
+		fallback.debug({ event: 'pretty_logging_unavailable' });
+		return fallback;
+	}
+}
+
+export const baseLogger = createBaseLogger();
 
 /**
  * Context for scoped loggers

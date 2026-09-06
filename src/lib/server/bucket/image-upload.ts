@@ -14,7 +14,7 @@
  * path directly.
  */
 
-import { createHash } from 'crypto';
+import { createHash } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { imageSize } from 'image-size';
 
