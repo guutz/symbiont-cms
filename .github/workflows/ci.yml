@@ -21,8 +21,6 @@ jobs:
       # allowlisting) changed between 10 and 11, and that mechanism is exactly
       # where this package's release breakages have lived.
       - uses: pnpm/action-setup@v4
-        with:
-          version: 11
 
       - uses: actions/setup-node@v4
         with:
