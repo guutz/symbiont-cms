@@ -41,7 +41,22 @@ function json(data: unknown, init?: { status?: number; headers?: HeadersInit }):
 	return new Response(JSON.stringify(data), { status: init?.status ?? 200, headers });
 }
 
-const CRON_SECRET = requireEnvVar('CRON_SECRET', 'Set CRON_SECRET for authenticating scheduled jobs.');
+/**
+ * Read lazily, at request time -- NOT at module scope.
+ *
+ * This was previously a module-level `const CRON_SECRET = requireEnvVar(...)`,
+ * which threw during import. Because `server.ts` re-exports from this file,
+ * that made CRON_SECRET a hard requirement for importing *anything* from
+ * `symbiont-cms/server` -- including `renderMarkdownToHtml`. A consumer
+ * rendering an article page would fail with a missing-CRON_SECRET error, even
+ * though nothing on that path syncs anything.
+ *
+ * Keep env reads inside the handler that needs them so a missing variable fails
+ * the one endpoint that requires it, at the moment it is called.
+ */
+function getCronSecret(): string {
+	return requireEnvVar('CRON_SECRET', 'Set CRON_SECRET for authenticating scheduled jobs.');
+}
 
 export interface SyncFromNotionResult {
 	summaries: SyncResult[];
@@ -226,7 +241,7 @@ export async function handlePollBlogRequest(client: SymbiontClient, event: Symbi
 			event.url.searchParams.get('secret') ??
 			'';
 
-		if (providedSecret !== CRON_SECRET) {
+		if (providedSecret !== getCronSecret()) {
 			logger.warn({ event: 'unauthorized_sync_attempt' });
 			return json({ error: 'Unauthorized' }, { status: 401 });
 		}
