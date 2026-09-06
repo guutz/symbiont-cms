@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Match the pnpm major that consumers actually run. This is not cosmetic:
+      # the way pnpm prepares a git-hosted dependency (nested install, build-script
+      # allowlisting) changed between 10 and 11, and that mechanism is exactly
+      # where this package's release breakages have lived.
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+      - run: pnpm check
+      - run: pnpm build
+
+      # Guard the class of bug that made three consecutive tags unusable: server
+      # code reaching for something that only resolves inside a SvelteKit/Vite
+      # build. Consumers import `symbiont-cms/server` from plain Node.
+      - name: No framework-only imports in library code
+        run: |
+          set -euo pipefail
+          if grep -rnE "^\s*import .*from '(\\\$env|\\\$app|@sveltejs/kit)" src/lib --include='*.ts'; then
+            echo "::error::src/lib imports a SvelteKit-only module. These are Vite virtual"
+            echo "::error::modules (or an undeclared dependency) and fail outside a SvelteKit"
+            echo "::error::build, breaking 'import symbiont-cms/server' from Node."
+            exit 1
+          fi
+          echo "ok: no SvelteKit-only imports in src/lib"
+
+      # An env read at module scope throws on IMPORT, not on use. Because
+      # server.ts re-exports webhook.js, a module-level requireEnvVar() made
+      # CRON_SECRET mandatory just to call renderMarkdownToHtml().
+      - name: No module-scope env reads that throw
+        run: |
+          set -euo pipefail
+          if grep -rnE "^const .*requireEnvVar\(" src/lib --include='*.ts'; then
+            echo "::error::requireEnvVar() at module scope throws during import."
+            echo "::error::Move it inside the handler that needs the variable."
+            exit 1
+          fi
+          echo "ok: no module-scope requireEnvVar"
+
+      # The decisive one: can a bare Node project actually load this?
+      # Static analysis cannot catch everything here -- pino-pretty was referenced
+      # as a transport *target string*, not an import, so no grep would find it.
+      # Only loading the built output does.
+      - name: Built package imports from plain Node
+        run: |
+          set -euo pipefail
+          probe="$(mktemp -d)"
+          cp -R dist "$probe/dist"
+          cp package.json "$probe/package.json"
+          cd "$probe"
+          # Install only real runtime deps -- no devDependencies. If server code
+          # needs something declared as a devDependency, this fails, which is the
+          # point.
+          npm install --omit=dev --no-audit --no-fund --loglevel=error
+          node --input-type=module -e "
+            const m = await import('symbiont-cms/server');
+            const required = ['createSymbiontClient','handlePollBlogRequest','renderMarkdownToHtml'];
+            const missing = required.filter((k) => typeof m[k] !== 'function');
+            if (missing.length) { console.error('missing exports:', missing.join(', ')); process.exit(1); }
+            console.log('ok: symbiont-cms/server loaded,', Object.keys(m).length, 'exports');
+          "

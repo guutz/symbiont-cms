@@ -62,11 +62,17 @@ fi
 echo "==> version -> $VERSION"
 npm --no-git-tag-version version "$VERSION" >/dev/null
 
+# Clear build output BEFORE testing. Vitest is scoped to src/ (see the test
+# block in vite.config.ts), but a stale dist/ has previously been picked up and
+# graded as if it were current -- reporting failures for code that was already
+# fixed. Removing it first makes that impossible rather than merely unlikely.
+echo "==> clean"
+rm -rf dist .svelte-kit/__package__
+
 echo "==> test"
 pnpm test
 
 echo "==> build"
-rm -rf dist
 pnpm build
 
 for f in dist/index.js dist/index.d.ts dist/server.js dist/server.d.ts; do

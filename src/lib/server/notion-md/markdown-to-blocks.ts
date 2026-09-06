@@ -11,7 +11,12 @@
  *   - `$$...$$` inline with other text → Notion rich_text equation item
  */
 
-import unified from 'unified';
+// unified v11 is pure ESM and exports `unified` as a NAMED export. v9 (which
+// this used to pin) was CJS with a default export, so `import unified from
+// 'unified'` silently resolved to undefined after the upgrade and failed at the
+// call site with "default is not a function".
+// remark-parse and remark-gfm still have default exports, so those are unchanged.
+import { unified } from 'unified';
 import remarkParse from 'remark-parse';
 import remarkGfm from 'remark-gfm';
 import {

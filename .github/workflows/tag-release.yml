@@ -15,14 +15,18 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # Pinned to the pnpm major consumers use. The nested-install behaviour pnpm
+      # uses when preparing a git dependency differs between 10 and 11, and that
+      # is precisely where this package's release breakages have occurred -- so CI
+      # must not run a different major from the people installing it.
       - uses: pnpm/action-setup@v5
         with:
-          version: 10.18.1
+          version: 11
           run_install: false
 
       - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 22
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
@@ -43,3 +47,87 @@ jobs:
           files: |
             symbiont-cms-${{ github.ref_name }}.tgz
             symbiont-cms-${{ github.ref_name }}.tgz.sha256
+
+  # ---------------------------------------------------------------------------
+  # Install the tag the way consumers actually do, and prove it imports.
+  #
+  # WHY THIS IS A SEPARATE JOB
+  #   The release job above builds locally and packs a .tgz. That tarball is NOT
+  #   what consumers get -- they resolve `github:guutz/symbiont-cms#<tag>`, which
+  #   is the raw git tarball. Those differ in exactly the ways that broke v1.1.1
+  #   through v1.1.4:
+  #     - dist/ is gitignored, so the tag had no build output at all
+  #     - pnpm-workspace.yaml was untracked, so pnpm's nested install could not
+  #       run esbuild's build script and the dependency failed to prepare
+  #     - server code imported @sveltejs/kit and $env/dynamic/private, which only
+  #       resolve inside a Vite build
+  #     - pino-pretty was referenced as a transport target string -- invisible to
+  #       every static check -- and was only a devDependency
+  #
+  #   Each of those installed "successfully" and failed on import. This job is
+  #   the only thing that would have caught them.
+  #
+  # This runs AFTER the tag is pushed, so it reports rather than prevents. Treat a
+  # failure here as "yank/replace the tag", and run scripts/release.sh locally
+  # (which gates on the same conditions) to avoid getting here.
+  # ---------------------------------------------------------------------------
+  verify-install:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: pnpm/action-setup@v5
+        with:
+          version: 11
+          run_install: false
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Install this tag into a bare project and import it
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          probe="$(mktemp -d)"
+          cd "$probe"
+
+          cat > package.json <<EOF
+          {
+            "name": "symbiont-tag-probe",
+            "private": true,
+            "type": "module",
+            "dependencies": {
+              "symbiont-cms": "github:${GITHUB_REPOSITORY}#${TAG}"
+            }
+          }
+          EOF
+
+          # Mirrors what a consumer needs for pnpm's nested prepare step.
+          cat > pnpm-workspace.yaml <<'EOF'
+          allowBuilds:
+            symbiont-cms@git+https://github.com/guutz/symbiont-cms.git: true
+          EOF
+
+          pnpm install
+
+          for f in dist/index.js dist/index.d.ts dist/server.js dist/server.d.ts; do
+            test -f "node_modules/symbiont-cms/$f" \
+              || { echo "::error::missing $f in tag $TAG"; exit 1; }
+          done
+
+          node --input-type=module -e "
+            const client = await import('symbiont-cms');
+            const server = await import('symbiont-cms/server');
+            if (typeof client.createSymbiontClient !== 'function') {
+              console.error('createSymbiontClient missing'); process.exit(1);
+            }
+            const c = client.createSymbiontClient({
+              supabase: { url: 'https://example.supabase.co', publishableKey: 'x' },
+              databases: [{ alias: 'a', dataSourceId: 'b' }]
+            });
+            if (typeof c.getSSRClient !== 'function') {
+              console.error('getSSRClient missing'); process.exit(1);
+            }
+            console.log('ok: tag imports cleanly (' + Object.keys(server).length + ' server exports)');
+          "
