@@ -71,7 +71,7 @@ export interface SymbiontClient {
  *
  * Then import and use it anywhere:
  * ```ts
- * import { symbiont } from './symbiont';
+ * import { symbiont } from '$lib/symbiont';
  *
  * // In +page.server.ts
  * export const load = async ({ params, fetch }) => {

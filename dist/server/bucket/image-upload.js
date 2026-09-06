@@ -224,3 +224,4 @@ export function getImageUrl(supabase, path, transform) {
     const { data } = supabase.storage.from('media').getPublicUrl(path);
     return data.publicUrl;
 }
+//# sourceMappingURL=image-upload.js.map

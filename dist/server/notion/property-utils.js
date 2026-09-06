@@ -60,3 +60,4 @@ export function getPropertyNumberValue(property) {
     const parsed = Number.parseInt(textValue, 10);
     return Number.isFinite(parsed) ? parsed : null;
 }
+//# sourceMappingURL=property-utils.js.map

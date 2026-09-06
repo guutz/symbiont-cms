@@ -10,3 +10,4 @@
 export * from './types.js';
 export * from './registry.js';
 export * from './default-hooks.js';
+//# sourceMappingURL=index.js.map

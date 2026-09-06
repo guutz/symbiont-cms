@@ -6,26 +6,36 @@
 #
 # WHY THIS SCRIPT EXISTS
 #   Consumers install this package from a GitHub tag
-#   ("symbiont-cms": "github:guutz/symbiont-cms#v1.1.2"). Two things have to be
-#   true for that to work, and v1.1.1 satisfied neither:
+#   ("symbiont-cms": "github:guutz/symbiont-cms#v1.1.9"), which resolves to the
+#   raw git tarball -- NOT to an npm-packed artifact. So whatever is committed at
+#   the tag is exactly what they get.
 #
-#   1. dist/ MUST BE IN THE TAG.
-#      Every `exports` entry in package.json points at ./dist/*, but dist/ is
-#      gitignored. A tag without it installs without error and then fails on
-#      first import. Relying on the consumer to build it does not work either:
-#      `prepare` is only `svelte-kit sync`, which does not emit dist -- the build
-#      is in `prepack`, which does not run on a git install.
+#   dist/ MUST BE IN THE TAG.
+#     Every `exports` entry points at ./dist/*, but dist/ is gitignored for
+#     day-to-day work. A tag without it installs with no error and then fails on
+#     first import. There is no longer any fallback: the `prepare` script was
+#     removed when the package stopped using SvelteKit, so pnpm has nothing to
+#     run on the consumer's side even if it wanted to build. Committing dist/ at
+#     the tag is the whole mechanism.
 #
-#   2. pnpm-workspace.yaml MUST BE IN THE TAG.
-#      pnpm prepares a git dependency by running a NESTED `pnpm install` inside a
-#      temp checkout. That install does not see the consumer's pnpm config, so it
-#      needs this package's own `allowBuilds: esbuild: true`. Without it the
-#      nested install dies with ERR_PNPM_IGNORED_BUILDS and the whole dependency
-#      fails to prepare.
+#     This is approach 1 from
+#     .docs/2026-04-03-symbiont-git-tag-release-playbook.md ("fastest, simplest
+#     for now"). This script makes it automatic so it cannot be forgotten -- four
+#     consecutive tags (v1.1.1 through v1.1.4) shipped broken before it existed.
 #
-#   Committing dist/ is approach 1 from
-#   .docs/2026-04-03-symbiont-git-tag-release-playbook.md ("fastest, simplest
-#   for now"). This script makes it the automatic path so it cannot be forgotten.
+#   pnpm-workspace.yaml is still checked, but is now belt-and-braces.
+#     With no `prepare` script, pnpm should extract the tarball without running a
+#     nested install at all, so its `allowBuilds: esbuild: true` may no longer be
+#     load-bearing. Keeping the check costs nothing and protects against the case
+#     where pnpm decides to build anyway. `symbiont:verify-tag` in the consumer
+#     is the arbiter -- if it passes with that entry removed from the consumer's
+#     pnpm-workspace.yaml, this gate can go too.
+#
+#   BUILD IS NOW PLAIN tsc.
+#     `pnpm build` runs `tsc -p tsconfig.build.json && publint`. svelte-package
+#     was dropped along with the rest of the SvelteKit toolchain: this package
+#     has no .svelte files and exports no components, and svelte2tsx refuses to
+#     run under TypeScript 7, which blocked releases entirely.
 
 set -euo pipefail
 
@@ -45,17 +55,22 @@ if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
   exit 1
 fi
 
-# pnpm-workspace.yaml is load-bearing for consumers (see header). Refuse to tag
-# without it rather than shipping another dependency that cannot be prepared.
-if [ ! -f pnpm-workspace.yaml ]; then
-  echo "error: pnpm-workspace.yaml is missing. Consumers' nested install needs" >&2
-  echo "       'allowBuilds: { esbuild: true }' from this file." >&2
-  exit 1
+# Belt-and-braces since the `prepare` script was removed (see header): pnpm
+# should no longer run a nested install when preparing this dependency. Warn
+# rather than fail, so a deliberate cleanup of this file is not blocked.
+if [ ! -f pnpm-workspace.yaml ] || ! grep -q "esbuild" pnpm-workspace.yaml; then
+  echo "warning: pnpm-workspace.yaml missing or has no esbuild entry." >&2
+  echo "         Probably fine now that there is no 'prepare' script, but confirm" >&2
+  echo "         with 'pnpm run symbiont:verify-tag' in a consumer before relying" >&2
+  echo "         on it." >&2
 fi
-if ! grep -q "esbuild" pnpm-workspace.yaml; then
-  echo "error: pnpm-workspace.yaml does not mention esbuild." >&2
-  echo "       The nested install pnpm runs when preparing a git dependency" >&2
-  echo "       will fail with ERR_PNPM_IGNORED_BUILDS." >&2
+
+# The build must not silently fall back to a stale checkout of the old toolchain.
+if [ -f svelte.config.js ] || [ -d .svelte-kit ]; then
+  echo "error: svelte.config.js or .svelte-kit/ is present." >&2
+  echo "       This package was de-svelted; those should be gone. A stale" >&2
+  echo "       .svelte-kit/__package__ has previously been picked up by the test" >&2
+  echo "       runner and graded as if it were current." >&2
   exit 1
 fi
 
@@ -67,7 +82,7 @@ npm --no-git-tag-version version "$VERSION" >/dev/null
 # graded as if it were current -- reporting failures for code that was already
 # fixed. Removing it first makes that impossible rather than merely unlikely.
 echo "==> clean"
-rm -rf dist .svelte-kit/__package__
+rm -rf dist
 
 echo "==> test"
 pnpm test

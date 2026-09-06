@@ -36,3 +36,4 @@ export function replaceImageUrls(content, replacements) {
     }
     return updatedContent;
 }
+//# sourceMappingURL=image-url-extractor.js.map

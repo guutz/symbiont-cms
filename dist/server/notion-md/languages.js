@@ -211,3 +211,4 @@ export function parseCodeLanguage(lang) {
         return lower;
     return LANGUAGE_ALIASES[lower] ?? LANGUAGE_ALIASES[lang] ?? undefined;
 }
+//# sourceMappingURL=languages.js.map

@@ -7,3 +7,4 @@ export { defaultHooks } from './hooks/default-hooks.js';
 export { requirePublicEnvVar } from './client/utils/env.js';
 // Image zoom utilities (optional, requires medium-zoom to be installed separately)
 export { initializeImageZoom, imageZoom } from './client/image-zoom.js';
+//# sourceMappingURL=index.js.map

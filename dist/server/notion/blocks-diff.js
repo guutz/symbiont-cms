@@ -371,3 +371,4 @@ export function diffBlocks(existing, desired, forceFullReplaceThreshold = 0.6) {
     const forceFullReplace = fraction > forceFullReplaceThreshold;
     return { operations: ops, stats, forceFullReplace };
 }
+//# sourceMappingURL=blocks-diff.js.map

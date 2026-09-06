@@ -55,3 +55,4 @@ export { createSymbiontServer } from './sync-client.js';
 export { defineDatabase, resolveSyncDatabase } from './sync-client.js';
 // Hook sugar
 export { on } from './hook-sugar.js';
+//# sourceMappingURL=index.js.map

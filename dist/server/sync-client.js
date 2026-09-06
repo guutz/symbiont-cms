@@ -127,3 +127,4 @@ export function createSymbiontServer(client, syncConfigByAlias) {
         syncConfigByAlias
     };
 }
+//# sourceMappingURL=sync-client.js.map

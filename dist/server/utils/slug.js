@@ -4,3 +4,4 @@ import slugify from 'slugify';
  */
 export const createSlug = (text) => slugify.default?.(text, { lower: true, strict: true }) ??
     slugify(text, { lower: true, strict: true });
+//# sourceMappingURL=slug.js.map

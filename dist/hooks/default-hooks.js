@@ -681,3 +681,4 @@ export const defaultHooks = [
     defaultCoverProcessHook,
     defaultCoverSyncHook
 ];
+//# sourceMappingURL=default-hooks.js.map

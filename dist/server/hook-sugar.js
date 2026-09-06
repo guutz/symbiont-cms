@@ -9,3 +9,4 @@ export function on(event, fn, options) {
         fn
     };
 }
+//# sourceMappingURL=hook-sugar.js.map

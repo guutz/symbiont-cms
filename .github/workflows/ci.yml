@@ -14,15 +14,15 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # Match the pnpm major that consumers actually run. This is not cosmetic:
       # the way pnpm prepares a git-hosted dependency (nested install, build-script
       # allowlisting) changed between 10 and 11, and that mechanism is exactly
       # where this package's release breakages have lived.
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: pnpm

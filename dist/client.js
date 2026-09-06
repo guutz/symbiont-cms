@@ -27,7 +27,7 @@ const PAGES_TABLE = 'pages';
  *
  * Then import and use it anywhere:
  * ```ts
- * import { symbiont } from './symbiont';
+ * import { symbiont } from '$lib/symbiont';
  *
  * // In +page.server.ts
  * export const load = async ({ params, fetch }) => {
@@ -104,3 +104,4 @@ export function createSymbiontClient(config) {
         }
     };
 }
+//# sourceMappingURL=client.js.map

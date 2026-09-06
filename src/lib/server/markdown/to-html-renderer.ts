@@ -161,16 +161,24 @@ export async function renderMarkdownToHtml(
   const defaultLinkOpen = md.renderer.rules.link_open || 
     ((tokens, idx, options, env, self) => self.renderToken(tokens, idx, options));
   
+  // markdown-it 15 widened Token.attrGet()'s return type from `string | null` to
+  // `string | number | null`, so the value has to be narrowed before any string
+  // method is called on it.
+  const getHrefString = (token: { attrGet(name: string): string | number | null }): string | null => {
+    const value = token.attrGet('href');
+    return typeof value === 'string' ? value : null;
+  };
+
   md.renderer.rules.link_open = function (tokens, idx, options, env, self) {
     const token = tokens[idx];
-    const href = token.attrGet('href');
-    
+    const href = getHrefString(token);
+
     // Mangle mailto links to prevent email harvesting
     if (href && href.startsWith('mailto:')) {
       const mangledHref = mangleString(href);
       token.attrSet('href', mangledHref);
     }
-    
+
     return defaultLinkOpen(tokens, idx, options, env, self);
   };
   
@@ -183,7 +191,7 @@ export async function renderMarkdownToHtml(
     // Look backwards for link_open with mailto
     for (let i = idx - 1; i >= 0; i--) {
       if (tokens[i].type === 'link_open') {
-        const href = tokens[i].attrGet('href');
+        const href = getHrefString(tokens[i]);
         if (href && href.startsWith('mailto:')) {
           // This text is inside a mailto link, mangle it
           content = mangleString(content);

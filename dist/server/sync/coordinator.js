@@ -81,3 +81,4 @@ export function createNotionToDatabaseSyncCoordinator(client, config, adminSupab
     const sync = new NotionToDatabaseSync(notionClient, transformer, pageCrud, config);
     return sync;
 }
+//# sourceMappingURL=coordinator.js.map

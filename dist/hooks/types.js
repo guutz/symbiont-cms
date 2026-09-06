@@ -61,3 +61,4 @@ export const HOOK_EVENTS = {
     'cover:process': e(S.Pipeline, 'cover'),
     'cover:sync': e(S.RunAll) // side effect — no field
 };
+//# sourceMappingURL=types.js.map

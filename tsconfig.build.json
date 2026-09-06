@@ -1,0 +1,30 @@
+{
+  // Emit config. Replaces `svelte-package`, which did exactly one useful thing
+  // here -- copy src/lib to dist and emit .d.ts -- while requiring the entire
+  // SvelteKit toolchain to do it, and refusing to run at all under TypeScript 7
+  // (svelte2tsx has an explicit throwIfTypeScript7 guard).
+  //
+  // rootDir is src/lib so the layout matches what package.json#exports already
+  // points at:
+  //   src/lib/index.ts   -> dist/index.js   + dist/index.d.ts
+  //   src/lib/server.ts  -> dist/server.js  + dist/server.d.ts
+  //
+  // Tests are excluded here but still type-checked by `pnpm check`, which uses
+  // the base tsconfig.json.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": "dist",
+    "rootDir": "src/lib",
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true
+  },
+  "include": ["src/lib/**/*.ts"],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "src/lib/**/*.test.ts",
+    "src/lib/**/*.spec.ts"
+  ]
+}

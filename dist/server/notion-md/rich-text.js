@@ -116,3 +116,4 @@ export function ensureLength(text, options = {}) {
     const chunks = text.match(new RegExp(`[^]{1,${LIMITS.RICH_TEXT.TEXT_CONTENT}}`, 'g')) ?? [];
     return chunks.map(chunk => richText(chunk, options));
 }
+//# sourceMappingURL=rich-text.js.map

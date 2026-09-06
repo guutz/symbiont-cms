@@ -514,3 +514,4 @@ export class HookRegistry {
         return this.hooks.get(event)?.length || 0;
     }
 }
+//# sourceMappingURL=registry.js.map

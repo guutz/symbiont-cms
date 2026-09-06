@@ -194,3 +194,4 @@ export async function handlePollBlogRequest(client, event, hooks = []) {
         return json({ error: error.message ?? 'Unknown error' }, { status: 500 });
     }
 }
+//# sourceMappingURL=webhook.js.map

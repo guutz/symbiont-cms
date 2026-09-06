@@ -81,3 +81,4 @@ export function imageZoom(node, options) {
         destroy: zoom.destroy
     };
 }
+//# sourceMappingURL=image-zoom.js.map

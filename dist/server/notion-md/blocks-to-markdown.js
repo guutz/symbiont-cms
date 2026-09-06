@@ -331,3 +331,4 @@ const EMOJI_TO_GFM_ALERT = {
     '⚠️': 'WARNING',
     '❗': 'CAUTION',
 };
+//# sourceMappingURL=blocks-to-markdown.js.map
