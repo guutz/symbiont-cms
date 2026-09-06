@@ -1,4 +1,3 @@
-import { json } from '@sveltejs/kit';
 import { requireEnvVar } from './utils/env.js';
 import { createLogger } from './utils/logger.js';
 import { createNotionToDatabaseSyncCoordinator } from './sync/coordinator.js';
@@ -6,6 +5,16 @@ import { Client } from '@notionhq/client';
 import { createClient } from '@supabase/supabase-js';
 import { cleanupUnusedMedia } from './bucket/storage-cleanup.js';
 import { resolveSyncDatabase } from './sync-client.js';
+/**
+ * Local stand-in for SvelteKit's `json()` helper. Same shape, no framework.
+ */
+function json(data, init) {
+    const headers = new Headers(init?.headers);
+    if (!headers.has('content-type')) {
+        headers.set('content-type', 'application/json');
+    }
+    return new Response(JSON.stringify(data), { status: init?.status ?? 200, headers });
+}
 const CRON_SECRET = requireEnvVar('CRON_SECRET', 'Set CRON_SECRET for authenticating scheduled jobs.');
 /**
  * Sync one or more databases from Notion
@@ -68,7 +77,7 @@ export async function syncFromNotion(client, options = {}) {
  * Refactored to use new SyncOrchestrator architecture
  *
  * @param client - Symbiont client instance
- * @param event - SvelteKit RequestEvent
+ * @param event - A SvelteKit RequestEvent, or anything with { url, request }
  */
 export async function handleNotionWebhookRequest(client, event, hooks = []) {
     const logger = createLogger({ operation: 'webhook' });
@@ -134,7 +143,7 @@ export async function handleNotionWebhookRequest(client, event, hooks = []) {
  * Handle polling/cron sync requests
  *
  * @param client - Symbiont client instance
- * @param event - SvelteKit RequestEvent
+ * @param event - A SvelteKit RequestEvent, or anything with { url, request }
  */
 export async function handlePollBlogRequest(client, event, hooks = []) {
     const logger = createLogger({ operation: 'poll_sync' });

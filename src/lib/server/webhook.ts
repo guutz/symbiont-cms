@@ -1,5 +1,4 @@
 import type { PageObjectResponse } from '@notionhq/client';
-import { json, type RequestEvent } from '@sveltejs/kit';
 import { requireEnvVar } from './utils/env.js';
 import type { SymbiontClient } from '../client.js';
 import { createLogger } from './utils/logger.js';
@@ -11,6 +10,36 @@ import type { Database } from '../database.types.js';
 import { cleanupUnusedMedia, type MediaCleanupResult } from './bucket/storage-cleanup.js';
 import type { Hook } from '../hooks/types.js';
 import { resolveSyncDatabase } from './sync-client.js';
+
+/**
+ * The parts of a request this module actually uses.
+ *
+ * Previously typed as SvelteKit's `RequestEvent`, which meant
+ * `import { json, type RequestEvent } from '@sveltejs/kit'` -- a *runtime* import
+ * (`json` is a value, not a type) of a package that was only ever a
+ * devDependency here. Nothing declared it, so `symbiont-cms/server` had a hidden
+ * runtime dependency that happened to resolve because consumers are SvelteKit
+ * apps. Importing it from plain Node failed outright.
+ *
+ * Both fields are web standards, so a SvelteKit `RequestEvent` satisfies this
+ * structurally and callers need no changes. Keeps this package framework-
+ * agnostic, in line with the same decoupling done in client/utils/env.ts.
+ */
+export interface SymbiontRequestEvent {
+	url: URL;
+	request: Request;
+}
+
+/**
+ * Local stand-in for SvelteKit's `json()` helper. Same shape, no framework.
+ */
+function json(data: unknown, init?: { status?: number; headers?: HeadersInit }): Response {
+	const headers = new Headers(init?.headers);
+	if (!headers.has('content-type')) {
+		headers.set('content-type', 'application/json');
+	}
+	return new Response(JSON.stringify(data), { status: init?.status ?? 200, headers });
+}
 
 const CRON_SECRET = requireEnvVar('CRON_SECRET', 'Set CRON_SECRET for authenticating scheduled jobs.');
 
@@ -106,9 +135,9 @@ export async function syncFromNotion(
  * Refactored to use new SyncOrchestrator architecture
  * 
  * @param client - Symbiont client instance
- * @param event - SvelteKit RequestEvent
+ * @param event - A SvelteKit RequestEvent, or anything with { url, request }
  */
-export async function handleNotionWebhookRequest(client: SymbiontClient, event: RequestEvent, hooks: Hook[] = []) {
+export async function handleNotionWebhookRequest(client: SymbiontClient, event: SymbiontRequestEvent, hooks: Hook[] = []) {
 	const logger = createLogger({ operation: 'webhook' });
 
 	try {
@@ -186,9 +215,9 @@ export async function handleNotionWebhookRequest(client: SymbiontClient, event: 
  * Handle polling/cron sync requests
  * 
  * @param client - Symbiont client instance
- * @param event - SvelteKit RequestEvent
+ * @param event - A SvelteKit RequestEvent, or anything with { url, request }
  */
-export async function handlePollBlogRequest(client: SymbiontClient, event: RequestEvent, hooks: Hook[] = []) {
+export async function handlePollBlogRequest(client: SymbiontClient, event: SymbiontRequestEvent, hooks: Hook[] = []) {
 	const logger = createLogger({ operation: 'poll_sync' });
 
 	try {

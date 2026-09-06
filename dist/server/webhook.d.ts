@@ -1,8 +1,25 @@
-import { type RequestEvent } from '@sveltejs/kit';
 import type { SymbiontClient } from '../client.js';
 import type { SyncResult } from './sync/notion-to-database-sync.js';
 import { type MediaCleanupResult } from './bucket/storage-cleanup.js';
 import type { Hook } from '../hooks/types.js';
+/**
+ * The parts of a request this module actually uses.
+ *
+ * Previously typed as SvelteKit's `RequestEvent`, which meant
+ * `import { json, type RequestEvent } from '@sveltejs/kit'` -- a *runtime* import
+ * (`json` is a value, not a type) of a package that was only ever a
+ * devDependency here. Nothing declared it, so `symbiont-cms/server` had a hidden
+ * runtime dependency that happened to resolve because consumers are SvelteKit
+ * apps. Importing it from plain Node failed outright.
+ *
+ * Both fields are web standards, so a SvelteKit `RequestEvent` satisfies this
+ * structurally and callers need no changes. Keeps this package framework-
+ * agnostic, in line with the same decoupling done in client/utils/env.ts.
+ */
+export interface SymbiontRequestEvent {
+    url: URL;
+    request: Request;
+}
 export interface SyncFromNotionResult {
     summaries: SyncResult[];
     mediaCleanup?: MediaCleanupResult;
@@ -36,14 +53,14 @@ export declare function syncFromNotion(client: SymbiontClient, options?: {
  * Refactored to use new SyncOrchestrator architecture
  *
  * @param client - Symbiont client instance
- * @param event - SvelteKit RequestEvent
+ * @param event - A SvelteKit RequestEvent, or anything with { url, request }
  */
-export declare function handleNotionWebhookRequest(client: SymbiontClient, event: RequestEvent, hooks?: Hook[]): Promise<Response>;
+export declare function handleNotionWebhookRequest(client: SymbiontClient, event: SymbiontRequestEvent, hooks?: Hook[]): Promise<Response>;
 /**
  * Handle polling/cron sync requests
  *
  * @param client - Symbiont client instance
- * @param event - SvelteKit RequestEvent
+ * @param event - A SvelteKit RequestEvent, or anything with { url, request }
  */
-export declare function handlePollBlogRequest(client: SymbiontClient, event: RequestEvent, hooks?: Hook[]): Promise<Response>;
+export declare function handlePollBlogRequest(client: SymbiontClient, event: SymbiontRequestEvent, hooks?: Hook[]): Promise<Response>;
 //# sourceMappingURL=webhook.d.ts.map
