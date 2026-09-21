@@ -36,6 +36,16 @@ export const HOOK_EVENTS = {
     'page:before': e(S.RunAll),
     'page:should-sync': e(S.AndAll), // flow control — no field
     'page:after': e(S.RunAll),
+    /*
+     * Fired once per page after the sync has finished, successfully or not.
+     * ctx.input is a SyncResultReport. Side effect only -- nothing is written
+     * back to the output, which has already been persisted (or has failed to be).
+     *
+     * This is where reporting belongs. Symbiont knows a sync happened and
+     * whether it worked; it does not know whether this particular newsroom wants
+     * that in a Notion column, a Slack channel, or nowhere.
+     */
+    'sync:result': e(S.RunAll),
     // ── Publishing ─────────────────────────────────────────────────────
     'publish:check': e(S.AndAll), // flow control — no field
     'publish:date': e(S.FirstWins, 'publish_at'),

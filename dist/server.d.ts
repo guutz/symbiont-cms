@@ -16,4 +16,7 @@ export type { UploadImageOptions, UploadFileOptions, UploadBufferOptions, Upload
 export { convertMarkdownToNotionBlocks } from './server/notion-md/markdown-to-blocks.js';
 export { extractImageUrls, replaceImageUrls } from './server/markdown/image-url-extractor.js';
 export { getPropertyByName, getFirstPropertyByName, getPropertyPlainText, getPropertyNamedValue, getPropertyNumberValue, } from './server/notion/property-utils.js';
+export { appendOrReplaceTaggedLine, toRichTextRequest, MAX_RICH_TEXT_ITEM_LENGTH, type RichTextRequestItem, type TaggedLineOptions } from './server/notion/rich-text.js';
+export { withNotionRetry } from './server/notion/retry.js';
+export { getBotUserId, wasLastEditedByBot } from './server/notion/identity.js';
 //# sourceMappingURL=server.d.ts.map

@@ -13,6 +13,13 @@ export interface SyncOptions {
     /** Maximum number of pages to process (stops early if reached) */
     limit?: number;
 }
+export interface ProcessPageOptions {
+    /**
+     * The caller knows something changed, so do not re-derive that from
+     * timestamps. Set on the webhook path.
+     */
+    trustEvent?: boolean;
+}
 export interface SyncResult {
     alias: string;
     dataSourceId: string;
@@ -49,7 +56,7 @@ export declare class NotionToDatabaseSync {
          * Process a single page (used by webhook handler)
          * Returns true if page was processed, false if skipped
          */
-    processPage(page: PageObjectResponse, existingSyncRef?: string): Promise<boolean>;
+    processPage(page: PageObjectResponse, existingSyncRef?: string, options?: ProcessPageOptions): Promise<boolean>;
     /**
      * Build Notion API filter for incremental sync
      */

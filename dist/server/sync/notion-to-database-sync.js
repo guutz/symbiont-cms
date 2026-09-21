@@ -1,7 +1,47 @@
+import { wasLastEditedByBot } from '../notion/identity.js';
 import { NotionClient } from '../notion/client.js';
 import { DatabasePageCRUD } from '../database/page-crud.js';
 import { NotionPageToDatabasePageTransformer } from '../notion/page-transformer.js';
 import { createLogger } from '../utils/logger.js';
+/**
+ * Columns that change on every sync by construction, so comparing them would
+ * make every page look modified. `updated_at` mirrors Notion's
+ * last_edited_time, which moves even when nothing we store has changed.
+ */
+/**
+ * Notion rounds last_edited_time down to the minute, so two timestamps can only
+ * be meaningfully ordered when they are more than a minute apart.
+ * https://developers.notion.com/changelog/last-edited-time-is-now-rounded-to-the-nearest-minute
+ */
+const NOTION_TIMESTAMP_GRANULARITY_MS = 60_000;
+const VOLATILE_FIELDS = new Set(['id', 'created_at', 'updated_at', 'last_synced_at']);
+/** Key order in JSONB round-trips is not stable, so sort before comparing. */
+function stableStringify(value) {
+    return (JSON.stringify(value, (_key, inner) => inner && typeof inner === 'object' && !Array.isArray(inner)
+        ? Object.fromEntries(Object.entries(inner).sort(([a], [b]) => a.localeCompare(b)))
+        : inner) ?? 'null');
+}
+/**
+ * Whether this page would write the same row it already has.
+ *
+ * This is the real guard on whether a sync does anything, replacing the
+ * timestamp comparison that used to serve that purpose. Notion rounds
+ * last_edited_time *down to the minute*, so two edits in the same minute are
+ * indistinguishable by timestamp -- which silently dropped the second and third
+ * of a run of property changes. Comparing the rows themselves has no such blind
+ * spot, and it makes the sync idempotent, which is also what stops a status
+ * write-back from looping.
+ */
+function isContentUnchanged(existing, next) {
+    for (const [key, value] of Object.entries(next)) {
+        if (VOLATILE_FIELDS.has(key))
+            continue;
+        if (stableStringify(existing[key]) !== stableStringify(value)) {
+            return false;
+        }
+    }
+    return true;
+}
 /**
  * NotionToDatabaseSync - High-level sync coordination
  *
@@ -157,61 +197,88 @@ export class NotionToDatabaseSync {
          * Process a single page (used by webhook handler)
          * Returns true if page was processed, false if skipped
          */
-    async processPage(page, existingSyncRef) {
-        this.logger.debug({
-            event: 'process_page_started',
-            pageId: page.id
+    async processPage(page, existingSyncRef, options = {}) {
+        this.logger.debug({ event: 'process_page_started', pageId: page.id });
+        /*
+         * Whether a sync:result hook may write to this page.
+         *
+         * False when the most recent edit was our own, because a write-back in
+         * reply to our own write-back is an endless loop; and false when the bot id
+         * could not be determined, because then we cannot tell the difference.
+         * Symbiont works this out once and hands down the answer -- it is the sync
+         * engine's business not to fight itself -- but it does not decide whether
+         * anything gets written, which is the app's business.
+         */
+        const botUserId = await this.notionClient.getBotUserId();
+        const writeBackSafe = Boolean(botUserId) && !wasLastEditedByBot(page, botUserId);
+        const report = (fields) => ({
+            ok: true,
+            unchanged: false,
+            at: new Date(),
+            writeBackSafe,
+            ...fields
         });
-        // 1. Check if page needs updating (compare timestamps)
-        let syncRef = existingSyncRef;
-        if (!syncRef) {
+        try {
             const existingPage = await this.pageCrud.getByNotionPageId(page.id);
-            syncRef = existingPage?.last_synced_at ?? existingPage?.updated_at ?? undefined;
-        }
-        if (syncRef) {
-            const notionTime = new Date(page.last_edited_time).getTime();
-            const dbTime = new Date(syncRef).getTime();
-            const diff = notionTime - dbTime;
-            this.logger.debug({
-                event: 'timestamp_comparison',
-                pageId: page.id,
-                notionTime: page.last_edited_time,
-                dbTime: syncRef,
-                notionTimeMs: notionTime,
-                dbTimeMs: dbTime,
-                diffMs: diff,
-                willSkip: dbTime >= notionTime - 10000
-            });
-            // Skip if DB is up to date (allowing 10 second tolerance for clock drift)
-            if (dbTime >= notionTime - 10000) {
-                this.logger.debug({
-                    event: 'page_already_up_to_date',
-                    pageId: page.id,
-                    notionTime: page.last_edited_time,
-                    dbTime: syncRef
-                });
-                return false; // Skipped
+            /*
+             * A cheap prefilter for the polling path only, and deliberately not the
+             * thing that decides whether work happens -- isContentUnchanged does that.
+             *
+             * The previous condition here was `dbTime >= notionTime - 10_000`, which
+             * skipped any edit whose (minute-rounded) Notion timestamp was within ten
+             * seconds of the last sync. Since a sync completes a second or two after
+             * the edit that triggered it, that swallowed essentially every follow-up
+             * change made in the same minute. The tolerance also had the wrong sign
+             * for its stated purpose: guarding against clock drift should make you
+             * more willing to sync, not less.
+             *
+             * Skipping only when the database is a full minute *ahead* is safe in the
+             * direction that matters: a sync at 10:01:05 fetched the page as it stood
+             * at 10:01:05, so it already contains anything stamped 10:00.
+             */
+            const syncRef = existingSyncRef ?? existingPage?.last_synced_at ?? existingPage?.updated_at ?? undefined;
+            if (!options.trustEvent && syncRef) {
+                const notionTime = new Date(page.last_edited_time).getTime();
+                const dbTime = new Date(syncRef).getTime();
+                if (dbTime >= notionTime + NOTION_TIMESTAMP_GRANULARITY_MS) {
+                    this.logger.debug({
+                        event: 'page_already_up_to_date',
+                        pageId: page.id,
+                        notionTime: page.last_edited_time,
+                        dbTime: syncRef
+                    });
+                    return false;
+                }
             }
-        }
-        // 2. Build page data (applies all business logic including exclusion via hooks)
-        const pageData = await this.pageTransformer.transformPage(page);
-        // 3. Skip if excluded or not publishable
-        if (!pageData) {
+            const pageData = await this.pageTransformer.transformPage(page);
+            if (!pageData) {
+                this.logger.debug({ event: 'page_skipped', pageId: page.id });
+                return false;
+            }
+            if (existingPage && isContentUnchanged(existingPage, pageData)) {
+                this.logger.debug({ event: 'page_unchanged', pageId: page.id, slug: pageData.slug });
+                await this.pageTransformer.reportSyncResult(page, report({ unchanged: true }));
+                return false;
+            }
+            await this.pageCrud.upsert(pageData);
             this.logger.debug({
-                event: 'page_skipped',
-                pageId: page.id
+                event: 'page_processed',
+                pageId: page.id,
+                slug: pageData.slug,
+                title: pageData.title
             });
-            return false;
+            await this.pageTransformer.reportSyncResult(page, report({}));
+            return true;
         }
-        // 4. Upsert to database
-        await this.pageCrud.upsert(pageData);
-        this.logger.debug({
-            event: 'page_processed',
-            pageId: page.id,
-            slug: pageData.slug,
-            title: pageData.title
-        });
-        return true;
+        catch (error) {
+            /*
+             * A failure an editor can see, instead of a 500 in a log nobody reads
+             * -- if the app has registered a hook that surfaces it. reportSyncResult
+             * swallows hook errors, so the original failure is what propagates.
+             */
+            await this.pageTransformer.reportSyncResult(page, report({ ok: false, error }));
+            throw error;
+        }
     }
     /**
      * Build Notion API filter for incremental sync

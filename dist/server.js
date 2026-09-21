@@ -28,4 +28,13 @@ export { convertMarkdownToNotionBlocks } from './server/notion-md/markdown-to-bl
 export { extractImageUrls, replaceImageUrls } from './server/markdown/image-url-extractor.js';
 // Notion property helpers
 export { getPropertyByName, getFirstPropertyByName, getPropertyPlainText, getPropertyNamedValue, getPropertyNumberValue, } from './server/notion/property-utils.js';
+/*
+ * Mechanism for writing back to Notion. Deliberately not a "sync status"
+ * feature: symbiont supplies the safe rich_text round-trip, the rate-limit
+ * retry and the self-edit detection, and the `sync:result` hook decides what,
+ * if anything, to say.
+ */
+export { appendOrReplaceTaggedLine, toRichTextRequest, MAX_RICH_TEXT_ITEM_LENGTH } from './server/notion/rich-text.js';
+export { withNotionRetry } from './server/notion/retry.js';
+export { getBotUserId, wasLastEditedByBot } from './server/notion/identity.js';
 //# sourceMappingURL=server.js.map

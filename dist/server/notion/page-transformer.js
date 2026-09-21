@@ -183,5 +183,28 @@ export class NotionPageToDatabasePageTransformer {
             throw error;
         }
     }
+    /**
+     * Fire `sync:result` for a page whose sync has finished.
+     *
+     * Lives here because the hook registry does, but it is called from the sync
+     * coordinator -- the outcome is only known after the upsert, which is
+     * outside the transformer. Exposed as this one method rather than by handing
+     * out the registry, so the registry stays owned by one object.
+     *
+     * Reporting must never be able to fail a sync that otherwise worked, so
+     * hook errors are logged and swallowed.
+     */
+    async reportSyncResult(page, report) {
+        try {
+            await this.hookRegistry.execute('sync:result', {}, page, report);
+        }
+        catch (error) {
+            this.logger.error({
+                event: 'sync_result_hook_failed',
+                pageId: page.id,
+                error: error?.message
+            });
+        }
+    }
 }
 //# sourceMappingURL=page-transformer.js.map

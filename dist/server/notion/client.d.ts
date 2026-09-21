@@ -1,5 +1,6 @@
 import { Client, type PageObjectResponse } from '@notionhq/client';
 import type { DiffResult } from './blocks-diff.js';
+import type { RichTextRequestItem } from './rich-text.js';
 import type { BlockTransformerFn } from '../notion-md/types.js';
 /**
  * Strip fields from block content that the Notion `blocks.update` endpoint
@@ -42,6 +43,18 @@ export declare class NotionClient {
     setBlockTransformer(type: string, fn: BlockTransformerFn): void;
     /** Remove all registered custom block transformers. */
     clearBlockTransformers(): void;
+    /**
+     * Replace a rich_text property's contents wholesale.
+     *
+     * Unlike updateProperty, which takes a plain string and therefore flattens
+     * everything, this takes an already-built item array -- see
+     * notion/rich-text.ts for helpers that preserve existing formatting. Goes
+     * through the write policy like any other property write, so a dry run
+     * writes nothing.
+     */
+    updateRichTextProperty(pageId: string, propertyName: string, items: RichTextRequestItem[]): Promise<boolean>;
+    /** The integration's own user, for detecting our own write-backs. */
+    getBotUserId(): Promise<string | null>;
     /**
      * Wrap a single Notion API call with retry logic for 429 (rate-limited)
      * responses. Reads the `Retry-After` header when present and falls back to
