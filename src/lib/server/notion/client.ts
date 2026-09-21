@@ -2,6 +2,9 @@ import { Client, type PageObjectResponse } from '@notionhq/client';
 import { createLogger } from '../utils/logger.js';
 import type { DiffResult, EditOperation } from './blocks-diff.js';
 import { blocksToMarkdown, setBlockTransformer, clearBlockTransformers } from '../notion-md/blocks-to-markdown.js';
+import { getBotUserId } from './identity.js';
+import { withNotionRetry } from './retry.js';
+import type { RichTextRequestItem } from './rich-text.js';
 import type { BlockTransformerFn } from '../notion-md/types.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -96,6 +99,49 @@ export class NotionClient {
 	/** Remove all registered custom block transformers. */
 	clearBlockTransformers(): void {
 		clearBlockTransformers();
+	}
+
+	/**
+	 * Replace a rich_text property's contents wholesale.
+	 *
+	 * Unlike updateProperty, which takes a plain string and therefore flattens
+	 * everything, this takes an already-built item array -- see
+	 * notion/rich-text.ts for helpers that preserve existing formatting. Goes
+	 * through the write policy like any other property write, so a dry run
+	 * writes nothing.
+	 */
+	async updateRichTextProperty(
+		pageId: string,
+		propertyName: string,
+		items: RichTextRequestItem[]
+	): Promise<boolean> {
+		if (this.shouldSkipWrite('properties', 'updateRichTextProperty', { pageId, propertyName })) {
+			return false;
+		}
+
+		try {
+			await withNotionRetry(() =>
+				this.notion.pages.update({
+					page_id: pageId,
+					properties: { [propertyName]: { rich_text: items } }
+				} as Parameters<Client['pages']['update']>[0])
+			);
+			this.logger.debug({ event: 'rich_text_property_updated', pageId, propertyName });
+			return true;
+		} catch (error: any) {
+			this.logger.error({
+				event: 'rich_text_property_update_failed',
+				pageId,
+				propertyName,
+				error: error?.message
+			});
+			return false;
+		}
+	}
+
+	/** The integration's own user, for detecting our own write-backs. */
+	async getBotUserId(): Promise<string | null> {
+		return getBotUserId(this.notion);
 	}
 
 	// ── Rate-limit-aware retry wrapper ──────────────────────────────────────

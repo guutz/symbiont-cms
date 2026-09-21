@@ -212,7 +212,13 @@ export async function handleNotionWebhookRequest(client: SymbiontClient, event: 
 		const resolved = resolveSyncDatabase(client, queryDbConfig);
 		const hooksForDatabase = hooks.length > 0 ? hooks : resolved.hooks;
 		const sync = createNotionToDatabaseSyncCoordinator(client, resolved.config, undefined, hooksForDatabase);
-		await sync.processPage(page);
+		/*
+		 * trustEvent: the automation fired because something changed. Re-deriving
+		 * that from last_edited_time cannot work -- Notion rounds it down to the
+		 * minute, so a second property edit within the same minute is
+		 * indistinguishable from the first and used to be dropped silently.
+		 */
+		await sync.processPage(page, undefined, { trustEvent: true });
 
 		logger.info({ event: 'webhook_processed_successfully', pageId });
 		return json({ message: `Successfully processed page ${pageId}` }, { status: 200 });

@@ -43,6 +43,16 @@ export const HOOK_EVENTS = {
 	'page:before': e<void>(S.RunAll),
 	'page:should-sync': e<boolean>(S.AndAll), // flow control — no field
 	'page:after': e<void>(S.RunAll),
+	/*
+	 * Fired once per page after the sync has finished, successfully or not.
+	 * ctx.input is a SyncResultReport. Side effect only -- nothing is written
+	 * back to the output, which has already been persisted (or has failed to be).
+	 *
+	 * This is where reporting belongs. Symbiont knows a sync happened and
+	 * whether it worked; it does not know whether this particular newsroom wants
+	 * that in a Notion column, a Slack channel, or nowhere.
+	 */
+	'sync:result': e<void>(S.RunAll),
 
 	// ── Publishing ─────────────────────────────────────────────────────
 	'publish:check': e<boolean>(S.AndAll), // flow control — no field
@@ -152,6 +162,30 @@ export type HookContext = {
 	 */
 	syncStore: Record<string, unknown>;
 };
+
+/**
+ * What `sync:result` receives as `ctx.input`.
+ */
+export interface SyncResultReport {
+	ok: boolean;
+	/** Present when ok is false. */
+	error?: Error;
+	/** True when the page was examined but nothing needed writing. */
+	unchanged: boolean;
+	/** When the sync ran. */
+	at: Date;
+	/**
+	 * Whether it is safe for this hook to write back to the Notion page.
+	 *
+	 * False when the page's most recent edit was the integration's own, and
+	 * false when that could not be determined at all. A hook that writes to
+	 * Notion MUST check this: writing unconditionally is an endless loop,
+	 * because the write fires the automation that triggered this sync. Hooks
+	 * with other side effects -- Slack, metrics, a database of runs -- can
+	 * ignore it and fire every time.
+	 */
+	writeBackSafe: boolean;
+}
 
 /**
  * Hook function signature.

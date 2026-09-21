@@ -6,6 +6,7 @@ import { NotionClient } from './client.js';
 import { DatabasePageCRUD } from '../database/page-crud.js';
 import { createLogger } from '../utils/logger.js';
 import { HookRegistry } from '../../hooks/registry.js';
+import type { SyncResultReport } from '../../hooks/types.js';
 import { defaultHooks } from '../../hooks/default-hooks.js';
 import type { Hook } from '../../hooks/types.js';
 
@@ -235,4 +236,26 @@ export class NotionPageToDatabasePageTransformer {
 		}
 	}
 
+	/**
+	 * Fire `sync:result` for a page whose sync has finished.
+	 *
+	 * Lives here because the hook registry does, but it is called from the sync
+	 * coordinator -- the outcome is only known after the upsert, which is
+	 * outside the transformer. Exposed as this one method rather than by handing
+	 * out the registry, so the registry stays owned by one object.
+	 *
+	 * Reporting must never be able to fail a sync that otherwise worked, so
+	 * hook errors are logged and swallowed.
+	 */
+	async reportSyncResult(page: PageObjectResponse, report: SyncResultReport): Promise<void> {
+		try {
+			await this.hookRegistry.execute('sync:result', {}, page, report);
+		} catch (error: any) {
+			this.logger.error({
+				event: 'sync_result_hook_failed',
+				pageId: page.id,
+				error: error?.message
+			});
+		}
+	}
 }

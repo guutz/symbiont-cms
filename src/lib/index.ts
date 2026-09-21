@@ -22,7 +22,8 @@ export type {
 	Hook,
 	HookEvent,
 	HookContext,
-	HookFunction
+	HookFunction,
+	SyncResultReport
 } from './hooks/types.js';
 
 // Default hooks for reference
