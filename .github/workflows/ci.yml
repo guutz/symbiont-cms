@@ -63,17 +63,43 @@ jobs:
       # Static analysis cannot catch everything here -- pino-pretty was referenced
       # as a transport *target string*, not an import, so no grep would find it.
       # Only loading the built output does.
+      #
+      # This installs a PACKED TARBALL into a project of a different name, rather
+      # than copying dist/ + package.json into a temp dir and installing that.
+      # Two reasons, and the first is the one that matters:
+      #
+      #   - Installing the tarball means npm installs symbiont-cms's
+      #     `dependencies` and nothing else, because devDependencies of a
+      #     dependency are never installed. That is a stronger guarantee than
+      #     `--omit=dev` on a root package, which only approximates it.
+      #   - `npm pack` honours the `files` field, so the probe receives exactly
+      #     what a consumer receives -- including the possibility that `files`
+      #     omits something the package needs.
+      #
+      # The old shape made the probe project *be* symbiont-cms and relied on
+      # Node's self-referencing resolution. It also made npm's tree builder crash
+      # outright ("Cannot read properties of null (reading 'edgesOut')"), which
+      # is a bug in npm rather than in this package -- but a check that cannot
+      # run is not a check.
       - name: Built package imports from plain Node
         run: |
           set -euo pipefail
+          tarball="$(pwd)/$(npm pack --silent | tail -n 1)"
+          echo "packed: ${tarball}"
+
           probe="$(mktemp -d)"
-          cp -R dist "$probe/dist"
-          cp package.json "$probe/package.json"
           cd "$probe"
-          # Install only real runtime deps -- no devDependencies. If server code
-          # needs something declared as a devDependency, this fails, which is the
-          # point.
-          npm install --omit=dev --no-audit --no-fund --loglevel=error
+          cat > package.json <<EOF
+          {
+            "name": "symbiont-import-probe",
+            "private": true,
+            "type": "module",
+            "dependencies": { "symbiont-cms": "file:${tarball}" }
+          }
+          EOF
+
+          npm install --no-audit --no-fund --loglevel=error
+
           node --input-type=module -e "
             const m = await import('symbiont-cms/server');
             const required = ['createSymbiontClient','handlePollBlogRequest','renderMarkdownToHtml'];
