@@ -139,6 +139,44 @@ export class NotionClient {
 		}
 	}
 
+	/**
+	 * Set several properties in one request.
+	 *
+	 * Notion's page update takes the whole properties object, so writing five
+	 * fields is one call rather than five -- which matters against a limit
+	 * expressed in requests per second. Values are passed through verbatim, so
+	 * the caller builds the Notion shapes it needs ({ select: { name } },
+	 * { checkbox: true }, and so on) and this stays indifferent to them.
+	 *
+	 * Goes through the write policy like every other property write.
+	 */
+	async updatePageProperties(pageId: string, properties: Record<string, unknown>): Promise<boolean> {
+		const names = Object.keys(properties);
+		if (names.length === 0) return false;
+
+		if (this.shouldSkipWrite('properties', 'updatePageProperties', { pageId, names })) {
+			return false;
+		}
+
+		try {
+			await withNotionRetry(() =>
+				this.notion.pages.update({ page_id: pageId, properties } as Parameters<
+					Client['pages']['update']
+				>[0])
+			);
+			this.logger.debug({ event: 'page_properties_updated', pageId, names });
+			return true;
+		} catch (error: any) {
+			this.logger.error({
+				event: 'page_properties_update_failed',
+				pageId,
+				names,
+				error: error?.message
+			});
+			return false;
+		}
+	}
+
 	/** The integration's own user, for detecting our own write-backs. */
 	async getBotUserId(): Promise<string | null> {
 		return getBotUserId(this.notion);

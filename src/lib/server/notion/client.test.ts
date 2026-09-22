@@ -16,7 +16,32 @@ describe('NotionClient write gate', () => {
 		await client.updateUrlProperty('page-1', 'PDF URL', 'https://example.com/file.pdf');
 		await client.updateNumberProperty('page-1', 'Word Count', 1234);
 		await client.updateFileProperty('page-1', 'Cover', 'https://example.com/cover.jpg');
+		await client.updatePageProperties('page-1', { Prominence: { select: { name: 'Lead' } } });
 
+		expect(notion.pages.update).not.toHaveBeenCalled();
+	});
+
+	it('sends every property in updatePageProperties as a single request', async () => {
+		const notion = { pages: { update: vi.fn() } } as any;
+		const client = new NotionClient(notion);
+
+		const properties = {
+			Prominence: { select: { name: 'Lead' } },
+			'Hide Summary': { checkbox: true },
+		};
+		const wrote = await client.updatePageProperties('page-1', properties);
+
+		expect(wrote).toBe(true);
+		// One call, not one per property: the rate limit counts requests.
+		expect(notion.pages.update).toHaveBeenCalledTimes(1);
+		expect(notion.pages.update).toHaveBeenCalledWith({ page_id: 'page-1', properties });
+	});
+
+	it('does not call Notion when there is nothing to write', async () => {
+		const notion = { pages: { update: vi.fn() } } as any;
+		const client = new NotionClient(notion);
+
+		expect(await client.updatePageProperties('page-1', {})).toBe(false);
 		expect(notion.pages.update).not.toHaveBeenCalled();
 	});
 
