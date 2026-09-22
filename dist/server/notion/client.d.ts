@@ -53,6 +53,18 @@ export declare class NotionClient {
      * writes nothing.
      */
     updateRichTextProperty(pageId: string, propertyName: string, items: RichTextRequestItem[]): Promise<boolean>;
+    /**
+     * Set several properties in one request.
+     *
+     * Notion's page update takes the whole properties object, so writing five
+     * fields is one call rather than five -- which matters against a limit
+     * expressed in requests per second. Values are passed through verbatim, so
+     * the caller builds the Notion shapes it needs ({ select: { name } },
+     * { checkbox: true }, and so on) and this stays indifferent to them.
+     *
+     * Goes through the write policy like every other property write.
+     */
+    updatePageProperties(pageId: string, properties: Record<string, unknown>): Promise<boolean>;
     /** The integration's own user, for detecting our own write-backs. */
     getBotUserId(): Promise<string | null>;
     /**
