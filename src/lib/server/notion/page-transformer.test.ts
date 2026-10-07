@@ -82,4 +82,68 @@ describe('NotionPageToDatabasePageTransformer', () => {
 			})
 		);
 	});
+
+	describe('content:should-sync', () => {
+		const page = {
+			id: 'page-456',
+			last_edited_time: '2026-10-06T12:00:00.000Z',
+			properties: {
+				Title: { type: 'title', title: [{ plain_text: 'Web Draft' }] },
+			},
+		} as any;
+
+		function build(contentShouldSync: Array<boolean | null>) {
+			const contentSync = vi.fn().mockResolvedValue(undefined);
+			const config: DatabaseBlueprint = {
+				alias: 'test-source',
+				dataSourceId: 'test-datasource',
+				hooks: [
+					{
+						name: 'test:slug:conflict:passthrough',
+						event: 'slug:conflict',
+						priority: 'override',
+						fn: async (ctx) => ctx.input as string,
+					},
+					{ name: 'test:content:sync:spy', event: 'content:sync', fn: contentSync },
+					...contentShouldSync.map((vote, i) => ({
+						name: `test:content:should-sync:${i}`,
+						event: 'content:should-sync' as const,
+						fn: async () => vote,
+					})),
+				],
+			};
+			const notionClient = { pageToMarkdown: vi.fn().mockResolvedValue('# Notion body') } as any;
+			const pageCrud = { upsert: vi.fn().mockResolvedValue(undefined) } as any;
+			const transformer = new NotionPageToDatabasePageTransformer(config, notionClient, pageCrud, {} as any);
+			return { transformer, notionClient, pageCrud, contentSync };
+		}
+
+		it('false: never reads the body, never writes it back, and upserts with no content key at all', async () => {
+			const { transformer, notionClient, pageCrud, contentSync } = build([false]);
+			const result = await transformer.transformPage(page);
+
+			expect(result).not.toBeNull();
+			expect(notionClient.pageToMarkdown).not.toHaveBeenCalled();
+			expect(contentSync).not.toHaveBeenCalled();
+			const upserted = pageCrud.upsert.mock.calls[0][0];
+			// Absent, not undefined-but-present: the column must be left alone.
+			expect(Object.prototype.hasOwnProperty.call(upserted, 'content')).toBe(false);
+			expect(upserted).toMatchObject({ page_id: 'page-456', title: 'Web Draft' });
+		});
+
+		it('no opinion (null) syncs content as usual', async () => {
+			const { transformer, notionClient, pageCrud } = build([null]);
+			await transformer.transformPage(page);
+
+			expect(notionClient.pageToMarkdown).toHaveBeenCalledWith('page-456');
+			expect(pageCrud.upsert.mock.calls[0][0].content).toBe('# Notion body');
+		});
+
+		it('one false among several trues still skips (AndAll)', async () => {
+			const { transformer, notionClient } = build([true, false, true]);
+			await transformer.transformPage(page);
+			expect(notionClient.pageToMarkdown).not.toHaveBeenCalled();
+		});
+	});
 });
+

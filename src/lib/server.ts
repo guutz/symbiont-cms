@@ -12,7 +12,7 @@ export * from './index.js';
 // ============================================================================
 
 // Webhook handlers & sync
-export { handlePollBlogRequest, handleNotionWebhookRequest, syncFromNotion } from './server/webhook.js';
+export { handlePollBlogRequest, handleNotionWebhookRequest, syncFromNotion, syncPage } from './server/webhook.js';
 export type { SyncFromNotionResult } from './server/webhook.js';
 export { createSymbiontServer, defineDatabase, resolveSyncDatabase } from './server/sync-client.js';
 export type { SymbiontSyncServer, SyncConfigMap, SyncDatabaseConfig, SyncSlotConfig } from './server/sync-client.js';
@@ -27,7 +27,7 @@ export { renderMarkdownToHtml, renderSummaryToHtml } from './server/markdown/to-
 export type { RenderedMarkdown } from './server/markdown/to-html-renderer.js';
 
 // Server utilities
-export { requireEnvVar, readEnvVar } from './server/utils/env.js';
+export { requireEnvVar, readEnvVar, setEnvSource } from './server/utils/env.js';
 export { createLogger } from './server/utils/logger.js';
 export { createSlug } from './server/utils/slug.js';
 
@@ -64,4 +64,15 @@ export {
 	type TaggedLineOptions
 } from './server/notion/rich-text.js';
 export { withNotionRetry } from './server/notion/retry.js';
+
+/*
+ * Deliberate whole-body writes to Notion. Not gated by syncBackToNotion, which
+ * governs sync write-back -- see the note in markdown-pages.ts.
+ */
+export { createPageFromMarkdown, replacePageMarkdown } from './server/notion/markdown-pages.js';
+export type {
+	CreatePageFromMarkdownOptions,
+	CreatedNotionPage,
+	ReplacePageMarkdownOptions
+} from './server/notion/markdown-pages.js';
 export { getBotUserId, wasLastEditedByBot } from './server/notion/identity.js';

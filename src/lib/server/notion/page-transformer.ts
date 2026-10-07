@@ -19,7 +19,7 @@ import type { Hook } from '../../hooks/types.js';
  * Responsibilities:
  * 1. Maintain mutable output object (DatabasePage being assembled)
  * 2. Fire events in exact order from Event Ordering Contract
- * 3. Handle conditionals: page:should-sync, publish:check
+ * 3. Handle conditionals: page:should-sync, publish:check, content:should-sync
  * 4. Bridge step: convert MdBlock[] to string after content:preprocess
  * 5. Perform final Supabase upsert
  * 
@@ -158,21 +158,31 @@ export class NotionPageToDatabasePageTransformer {
 
 			// ── Content Pipeline ───────────────────────────────────────
 
-			// content:preprocess — hook is responsible for fetching content (via pageToMarkdown)
-			// Returns a markdown string directly.
-			const rawMarkdown = (await this.hookRegistry.execute('content:preprocess', output, page) as string) ?? '';
+			// content:should-sync (flow control). Only an explicit false skips:
+			// with no hooks the registry returns null, and that means "as usual".
+			const contentShouldSync = await this.hookRegistry.execute('content:should-sync', output, page);
+			if (contentShouldSync === false) {
+				// output.content stays unset, so the upsert omits the column and the
+				// stored body survives. content:sync is skipped with the rest: it
+				// would otherwise write that body over the Notion page.
+				this.logger.info({ event: 'content_sync_skipped', pageId: page.id });
+			} else {
+				// content:preprocess — hook is responsible for fetching content (via pageToMarkdown)
+				// Returns a markdown string directly.
+				const rawMarkdown = (await this.hookRegistry.execute('content:preprocess', output, page) as string) ?? '';
 
-			// content:text (Pipeline: transform raw markdown string)
-			await this.hookRegistry.execute('content:text', output, page, rawMarkdown);
+				// content:text (Pipeline: transform raw markdown string)
+				await this.hookRegistry.execute('content:text', output, page, rawMarkdown);
 
-			// content:media (Pipeline: upload inline images, rewrite URLs)
-			await this.hookRegistry.execute('content:media', output, page, output.content);
+				// content:media (Pipeline: upload inline images, rewrite URLs)
+				await this.hookRegistry.execute('content:media', output, page, output.content);
 
-			// content:postprocess (Pipeline: final transforms)
-			await this.hookRegistry.execute('content:postprocess', output, page, output.content);
+				// content:postprocess (Pipeline: final transforms)
+				await this.hookRegistry.execute('content:postprocess', output, page, output.content);
 
-			// content:sync (write final content back to Notion)
-			await this.hookRegistry.execute('content:sync', output, page);
+				// content:sync (write final content back to Notion)
+				await this.hookRegistry.execute('content:sync', output, page);
+			}
 
 			// ── Cover Pipeline ─────────────────────────────────────────
 
