@@ -1,5 +1,5 @@
 export * from './index.js';
-export { handlePollBlogRequest, handleNotionWebhookRequest, syncFromNotion } from './server/webhook.js';
+export { handlePollBlogRequest, handleNotionWebhookRequest, syncFromNotion, syncPage } from './server/webhook.js';
 export type { SyncFromNotionResult } from './server/webhook.js';
 export { createSymbiontServer, defineDatabase, resolveSyncDatabase } from './server/sync-client.js';
 export type { SymbiontSyncServer, SyncConfigMap, SyncDatabaseConfig, SyncSlotConfig } from './server/sync-client.js';
@@ -8,7 +8,7 @@ export { cleanupUnusedMedia } from './server/bucket/storage-cleanup.js';
 export type { MediaCleanupResult } from './server/bucket/storage-cleanup.js';
 export { renderMarkdownToHtml, renderSummaryToHtml } from './server/markdown/to-html-renderer.js';
 export type { RenderedMarkdown } from './server/markdown/to-html-renderer.js';
-export { requireEnvVar, readEnvVar } from './server/utils/env.js';
+export { requireEnvVar, readEnvVar, setEnvSource } from './server/utils/env.js';
 export { createLogger } from './server/utils/logger.js';
 export { createSlug } from './server/utils/slug.js';
 export { uploadImageToSupabase, uploadFileToSupabase, uploadBufferToSupabase, needsUploadToSupabase, getImageUrl } from './server/bucket/image-upload.js';
@@ -18,5 +18,7 @@ export { extractImageUrls, replaceImageUrls } from './server/markdown/image-url-
 export { getPropertyByName, getFirstPropertyByName, getPropertyPlainText, getPropertyNamedValue, getPropertyNumberValue, } from './server/notion/property-utils.js';
 export { appendOrReplaceTaggedLine, toRichTextRequest, MAX_RICH_TEXT_ITEM_LENGTH, type RichTextRequestItem, type TaggedLineOptions } from './server/notion/rich-text.js';
 export { withNotionRetry } from './server/notion/retry.js';
+export { createPageFromMarkdown, replacePageMarkdown } from './server/notion/markdown-pages.js';
+export type { CreatePageFromMarkdownOptions, CreatedNotionPage, ReplacePageMarkdownOptions } from './server/notion/markdown-pages.js';
 export { getBotUserId, wasLastEditedByBot } from './server/notion/identity.js';
 //# sourceMappingURL=server.d.ts.map

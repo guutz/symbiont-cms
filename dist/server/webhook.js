@@ -87,6 +87,52 @@ export async function syncFromNotion(client, options = {}) {
     return { summaries, ...(mediaCleanup !== undefined && { mediaCleanup }) };
 }
 /**
+ * Fetch one page from Notion and run it through the sync, as the webhook does.
+ * Shared by handleNotionWebhookRequest and syncPage so there is one path.
+ */
+async function processOnePage(client, dbConfig, pageId, hooks = [], expectDataSourceId) {
+    const notion = new Client({ auth: requireEnvVar('NOTION_TOKEN') });
+    const page = (await notion.pages.retrieve({ page_id: pageId }));
+    if (expectDataSourceId) {
+        const parent = page.parent;
+        if (parent?.data_source_id && parent.data_source_id !== expectDataSourceId) {
+            throw new Error(`syncPage: page ${pageId} belongs to data source ${parent.data_source_id}, not ${expectDataSourceId}.`);
+        }
+    }
+    const resolved = resolveSyncDatabase(client, dbConfig);
+    const hooksForDatabase = hooks.length > 0 ? hooks : resolved.hooks;
+    const sync = createNotionToDatabaseSyncCoordinator(client, resolved.config, undefined, hooksForDatabase);
+    /*
+     * trustEvent: the caller knows something changed. Re-deriving that from
+     * last_edited_time cannot work -- Notion rounds it down to the minute, so a
+     * second property edit within the same minute is indistinguishable from the
+     * first and used to be dropped silently.
+     */
+    return sync.processPage(page, undefined, { trustEvent: true });
+}
+/**
+ * Sync a single page, now, without waiting for the webhook or the cron.
+ *
+ * For code that has just created or changed a page in Notion and needs the
+ * database row to reflect it before it continues -- e.g. a form that creates a
+ * Notion page and then has to work with the resulting `pages` row. It runs the
+ * same pipeline and hooks as every other sync, so the app never hand-writes a
+ * row into symbiont's table.
+ *
+ * @param database - the datasource alias or dataSourceId the page belongs to
+ * @returns true if the page was processed, false if a hook skipped it
+ * @throws if the database is not configured, or the page belongs to a
+ *   different data source -- syncing it under the wrong alias would file it in
+ *   the wrong place
+ */
+export async function syncPage(client, database, pageId, options = {}) {
+    const dbConfig = client.config.databases.find((db) => db.alias === database || db.dataSourceId === database);
+    if (!dbConfig) {
+        throw new Error(`syncPage: database "${database}" is not configured.`);
+    }
+    return processOnePage(client, dbConfig, pageId, options.hooks ?? [], dbConfig.dataSourceId);
+}
+/**
  * Handle Notion webhook requests for page updates
  *
  * Refactored to use new SyncOrchestrator architecture
@@ -132,22 +178,7 @@ export async function handleNotionWebhookRequest(client, event, hooks = []) {
             alias: queryDbConfig.alias,
             dataSourceId: queryDbConfig.dataSourceId
         });
-        // Get Notion token from environment
-        const notionToken = requireEnvVar('NOTION_TOKEN');
-        // Fetch page from Notion
-        const notion = new Client({ auth: notionToken });
-        const page = (await notion.pages.retrieve({ page_id: pageId }));
-        // Create sync coordinator and process page
-        const resolved = resolveSyncDatabase(client, queryDbConfig);
-        const hooksForDatabase = hooks.length > 0 ? hooks : resolved.hooks;
-        const sync = createNotionToDatabaseSyncCoordinator(client, resolved.config, undefined, hooksForDatabase);
-        /*
-         * trustEvent: the automation fired because something changed. Re-deriving
-         * that from last_edited_time cannot work -- Notion rounds it down to the
-         * minute, so a second property edit within the same minute is
-         * indistinguishable from the first and used to be dropped silently.
-         */
-        await sync.processPage(page, undefined, { trustEvent: true });
+        await processOnePage(client, queryDbConfig, pageId, hooks);
         logger.info({ event: 'webhook_processed_successfully', pageId });
         return json({ message: `Successfully processed page ${pageId}` }, { status: 200 });
     }

@@ -48,6 +48,24 @@ export declare function syncFromNotion(client: SymbiontClient, options?: {
     hooks?: Hook[];
 }): Promise<SyncFromNotionResult>;
 /**
+ * Sync a single page, now, without waiting for the webhook or the cron.
+ *
+ * For code that has just created or changed a page in Notion and needs the
+ * database row to reflect it before it continues -- e.g. a form that creates a
+ * Notion page and then has to work with the resulting `pages` row. It runs the
+ * same pipeline and hooks as every other sync, so the app never hand-writes a
+ * row into symbiont's table.
+ *
+ * @param database - the datasource alias or dataSourceId the page belongs to
+ * @returns true if the page was processed, false if a hook skipped it
+ * @throws if the database is not configured, or the page belongs to a
+ *   different data source -- syncing it under the wrong alias would file it in
+ *   the wrong place
+ */
+export declare function syncPage(client: SymbiontClient, database: string, pageId: string, options?: {
+    hooks?: Hook[];
+}): Promise<boolean>;
+/**
  * Handle Notion webhook requests for page updates
  *
  * Refactored to use new SyncOrchestrator architecture

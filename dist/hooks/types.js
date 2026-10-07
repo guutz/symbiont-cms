@@ -61,6 +61,20 @@ export const HOOK_EVENTS = {
     'metadata:summary': e(S.FirstWins, 'summary'),
     'metadata:add': e(S.Collect, 'meta'), // merged into output.meta
     // ── Content Pipeline ───────────────────────────────────────────────
+    /**
+     * Whether this sync reads the page body at all. AndAll: any `false` skips
+     * the whole content pipeline below -- preprocess through content:sync -- and
+     * the row is upserted WITHOUT a `content` field, so whatever is already in
+     * `pages.content` is left exactly as it is. No hooks, or all abstaining
+     * (null), means sync content as usual.
+     *
+     * For pages whose body is owned somewhere other than Notion (a web editor
+     * writing `pages.content` directly) while Notion still owns their
+     * properties. Omitting the column rather than re-writing the stored value is
+     * the point: a sync that read the row before another writer saved and
+     * upserted after would otherwise put the old text back.
+     */
+    'content:should-sync': e(S.AndAll), // flow control — no field
     'content:preprocess': e(S.FirstWins), // hook fetches content itself (pageToMarkdown); ctx.input unused; no field
     'content:text': e(S.Pipeline, 'content'),
     'content:media': e(S.Pipeline, 'content'),

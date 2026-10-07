@@ -21,6 +21,26 @@
  * PUBLIC_-prefixed variable through here. These are server-only helpers, so that
  * is a naming nit rather than a leak -- but do not re-export them to the client.
  */
+type EnvSource = Record<string, string | undefined>;
+/**
+ * Hand symbiont the app's environment, for frameworks where `process.env` is
+ * not the whole story.
+ *
+ * Vite's dev server does not load `.env` into `process.env` -- SvelteKit
+ * exposes it through `$env/dynamic/private` instead -- so under `vite dev`
+ * every secret read through requireEnvVar was missing, while the same code
+ * worked on Vercel, where the platform populates `process.env`. Call this once
+ * at server startup (in SvelteKit, `hooks.server.ts`):
+ *
+ *     import { env } from '$env/dynamic/private';
+ *     import { setEnvSource } from 'symbiont-cms/server';
+ *     setEnvSource(env);
+ *
+ * The injected source is consulted first and `process.env` second, so it only
+ * ever adds values; nothing that works today stops working. It keeps this
+ * module framework-agnostic -- it still imports nothing from SvelteKit.
+ */
+export declare function setEnvSource(source: EnvSource | null): void;
 /**
  * Read an environment variable (server-only).
  *
@@ -37,4 +57,5 @@ export declare function readEnvVar(name: string): string | undefined;
  * @throws Error if the variable is missing
  */
 export declare function requireEnvVar(name: string, hint?: string): string;
+export {};
 //# sourceMappingURL=env.d.ts.map

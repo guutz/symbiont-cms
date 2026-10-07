@@ -15,7 +15,7 @@ import type { Hook } from '../../hooks/types.js';
  * Responsibilities:
  * 1. Maintain mutable output object (DatabasePage being assembled)
  * 2. Fire events in exact order from Event Ordering Contract
- * 3. Handle conditionals: page:should-sync, publish:check
+ * 3. Handle conditionals: page:should-sync, publish:check, content:should-sync
  * 4. Bridge step: convert MdBlock[] to string after content:preprocess
  * 5. Perform final Supabase upsert
  *

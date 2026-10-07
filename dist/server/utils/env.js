@@ -27,6 +27,28 @@ function readFromProcess(name) {
     }
     return process.env[name];
 }
+let injected = null;
+/**
+ * Hand symbiont the app's environment, for frameworks where `process.env` is
+ * not the whole story.
+ *
+ * Vite's dev server does not load `.env` into `process.env` -- SvelteKit
+ * exposes it through `$env/dynamic/private` instead -- so under `vite dev`
+ * every secret read through requireEnvVar was missing, while the same code
+ * worked on Vercel, where the platform populates `process.env`. Call this once
+ * at server startup (in SvelteKit, `hooks.server.ts`):
+ *
+ *     import { env } from '$env/dynamic/private';
+ *     import { setEnvSource } from 'symbiont-cms/server';
+ *     setEnvSource(env);
+ *
+ * The injected source is consulted first and `process.env` second, so it only
+ * ever adds values; nothing that works today stops working. It keeps this
+ * module framework-agnostic -- it still imports nothing from SvelteKit.
+ */
+export function setEnvSource(source) {
+    injected = source;
+}
 /**
  * Read an environment variable (server-only).
  *
@@ -34,7 +56,7 @@ function readFromProcess(name) {
  * @returns The environment variable value, or undefined if unset
  */
 export function readEnvVar(name) {
-    return readFromProcess(name);
+    return injected?.[name] || readFromProcess(name);
 }
 /**
  * Require an environment variable (server-only).

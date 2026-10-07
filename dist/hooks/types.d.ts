@@ -105,6 +105,24 @@ export declare const HOOK_EVENTS: {
         strategy: CompositionStrategy;
         field: keyof DatabasePage | undefined;
     };
+    /**
+     * Whether this sync reads the page body at all. AndAll: any `false` skips
+     * the whole content pipeline below -- preprocess through content:sync -- and
+     * the row is upserted WITHOUT a `content` field, so whatever is already in
+     * `pages.content` is left exactly as it is. No hooks, or all abstaining
+     * (null), means sync content as usual.
+     *
+     * For pages whose body is owned somewhere other than Notion (a web editor
+     * writing `pages.content` directly) while Notion still owns their
+     * properties. Omitting the column rather than re-writing the stored value is
+     * the point: a sync that read the row before another writer saved and
+     * upserted after would otherwise put the old text back.
+     */
+    readonly 'content:should-sync': {
+        output: boolean;
+        strategy: CompositionStrategy;
+        field: keyof DatabasePage | undefined;
+    };
     readonly 'content:preprocess': {
         output: string;
         strategy: CompositionStrategy;
