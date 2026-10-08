@@ -67,7 +67,7 @@ export async function blocksToMarkdown(blocks, fetchChildren, depth = 0) {
             let counter = 1;
             while (i < blocks.length && blocks[i]?.type === 'numbered_list_item') {
                 const item = blocks[i];
-                const rt = richTextToMarkdown(item.numbered_list_item?.rich_text ?? []);
+                const rt = blockText(item.numbered_list_item?.rich_text ?? []);
                 const prefix = `${counter}. `;
                 const childMd = item.has_children
                     ? await blocksToMarkdown(await fetchChildren(item.id), fetchChildren, depth + 1)
@@ -104,27 +104,21 @@ async function blockToMarkdown(block, fetchChildren, depth = 0) {
                 const expr = richTexts[0].equation?.expression ?? '';
                 return `$$\n${expr}\n$$`;
             }
-            const text = richTextToMarkdown(richTexts);
-            if (!text.trim())
-                return '';
-            return text;
+            const text = blockText(richTexts);
+            return withChildren(text.trim() ? text : '', block, fetchChildren, depth);
         }
         // ── Headings ────────────────────────────────────────────────────────
-        case 'heading_1': {
-            const text = richTextToMarkdown(content?.rich_text ?? []);
-            return `# ${text}`;
-        }
-        case 'heading_2': {
-            const text = richTextToMarkdown(content?.rich_text ?? []);
-            return `## ${text}`;
-        }
+        // A toggle heading keeps its section in its children.
+        case 'heading_1':
+        case 'heading_2':
         case 'heading_3': {
-            const text = richTextToMarkdown(content?.rich_text ?? []);
-            return `### ${text}`;
+            const level = '#'.repeat(Number(type.slice(-1)));
+            const text = blockText(content?.rich_text ?? []);
+            return withChildren(`${level} ${text}`, block, fetchChildren, depth);
         }
         // ── Lists ────────────────────────────────────────────────────────────
         case 'bulleted_list_item': {
-            const rt = richTextToMarkdown(content?.rich_text ?? []);
+            const rt = blockText(content?.rich_text ?? []);
             const childMd = block.has_children
                 ? await blocksToMarkdown(await fetchChildren(block.id), fetchChildren, depth + 1)
                 : '';
@@ -134,7 +128,7 @@ async function blockToMarkdown(block, fetchChildren, depth = 0) {
         // ── To-do ────────────────────────────────────────────────────────────
         case 'to_do': {
             const checked = content?.checked ? 'x' : ' ';
-            const rt = richTextToMarkdown(content?.rich_text ?? []);
+            const rt = blockText(content?.rich_text ?? []);
             const childMd = block.has_children
                 ? await blocksToMarkdown(await fetchChildren(block.id), fetchChildren, depth + 1)
                 : '';
@@ -150,7 +144,7 @@ async function blockToMarkdown(block, fetchChildren, depth = 0) {
         }
         // ── Quote ────────────────────────────────────────────────────────────
         case 'quote': {
-            const rt = richTextToMarkdown(content?.rich_text ?? []);
+            const rt = blockText(content?.rich_text ?? []);
             const childMd = block.has_children
                 ? await blocksToMarkdown(await fetchChildren(block.id), fetchChildren, depth + 1)
                 : '';
@@ -159,7 +153,7 @@ async function blockToMarkdown(block, fetchChildren, depth = 0) {
         }
         // ── Callout → GFM alert ──────────────────────────────────────────────
         case 'callout': {
-            const rt = richTextToMarkdown(content?.rich_text ?? []);
+            const rt = blockText(content?.rich_text ?? []);
             const emoji = content?.icon?.emoji ?? '';
             const childMd = block.has_children
                 ? await blocksToMarkdown(await fetchChildren(block.id), fetchChildren, depth + 1)
@@ -209,7 +203,7 @@ async function blockToMarkdown(block, fetchChildren, depth = 0) {
         }
         // ── Toggle (rendered as details/summary or just its children) ────────
         case 'toggle': {
-            const rt = richTextToMarkdown(content?.rich_text ?? []);
+            const rt = blockText(content?.rich_text ?? []);
             const childMd = block.has_children
                 ? await blocksToMarkdown(await fetchChildren(block.id), fetchChildren, depth + 1)
                 : '';
@@ -278,7 +272,7 @@ async function blockToMarkdown(block, fetchChildren, depth = 0) {
         // ── Unsupported: fall back to rich_text if present ───────────────────
         default: {
             if (content?.rich_text) {
-                const text = richTextToMarkdown(content.rich_text);
+                const text = blockText(content.rich_text);
                 return text || null;
             }
             return null;
@@ -291,7 +285,7 @@ function renderTable(rows) {
         return '';
     const tableRows = rows.map(row => {
         const cells = row?.table_row?.cells ?? [];
-        return cells.map(cell => richTextToMarkdown(cell)
+        return cells.map(cell => blockText(cell)
             .replace(/\\/g, '\\\\') // escape backslashes first
             .replace(/\|/g, '\\|') // then escape pipe characters
             .replace(/\n/g, ' ') // collapse newlines to spaces
@@ -306,6 +300,35 @@ function renderTable(rows) {
     return body ? `${header}\n${separator}\n${body}` : `${header}\n${separator}`;
 }
 // ── Helpers ──────────────────────────────────────────────────────────────────
+/**
+ * A block's rich text as markdown, with whitespace removed from the start of
+ * every line.
+ *
+ * In markdown a line that starts with a tab or four spaces, after a blank
+ * line, is an indented CODE BLOCK -- and after a list marker, five spaces do
+ * the same. Notion text often starts with exactly that: a first-line indent
+ * pasted from Google Docs or Word, or a tab after a soft line break. Kept, it
+ * turned ordinary paragraphs into code on the website. Dropping it loses
+ * nothing visible: HTML never rendered a paragraph's leading whitespace.
+ */
+function blockText(richTexts) {
+    return richTextToMarkdown(richTexts).replace(/^[ \t]+/gm, '');
+}
+/**
+ * A block followed by its children, for blocks markdown cannot nest.
+ *
+ * Tab in Notion indents a paragraph under the one above it, which makes it that
+ * paragraph's CHILD; a toggle heading holds its whole section the same way.
+ * Markdown has no indented paragraph, so the children follow as ordinary
+ * blocks. Before this they were never fetched, and the text vanished from the
+ * website without any sign of it.
+ */
+async function withChildren(md, block, fetchChildren, depth) {
+    if (!block.has_children)
+        return md;
+    const childMd = await blocksToMarkdown(await fetchChildren(block.id), fetchChildren, depth + 1);
+    return joinBlocks([md, childMd]);
+}
 function prefixLines(text, prefix) {
     return text
         .split('\n')
