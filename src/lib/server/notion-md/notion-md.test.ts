@@ -167,6 +167,28 @@ describe('richTextToMarkdown (rich-text)', () => {
 		expect(richTextToMarkdown(rt as any)).toBe('**bold**');
 	});
 
+	it('moves whitespace at the edges of a formatted run outside the markers', () => {
+		// A real caption: the italic run took the space after it. `_Coffeehouse. _`
+		// is not emphasis in CommonMark and rendered with literal underscores.
+		const rt = [
+			{ type: 'text', text: { content: 'Coffeehouse. ' }, annotations: { italic: true } },
+			{ type: 'text', text: { content: '(Credit: The Big T, 1970)' }, annotations: {} },
+		];
+		expect(richTextToMarkdown(rt as any)).toBe('_Coffeehouse._ (Credit: The Big T, 1970)');
+
+		const both = [{ type: 'text', text: { content: ' both ' }, annotations: { bold: true, italic: true, strikethrough: true } }];
+		expect(richTextToMarkdown(both as any)).toBe(' _**~~both~~**_ ');
+	});
+
+	it('leaves a formatted run that is only whitespace unformatted', () => {
+		const rt = [
+			{ type: 'text', text: { content: 'a' }, annotations: {} },
+			{ type: 'text', text: { content: ' ' }, annotations: { italic: true } },
+			{ type: 'text', text: { content: 'b' }, annotations: {} },
+		];
+		expect(richTextToMarkdown(rt as any)).toBe('a b');
+	});
+
 	it('serializes inline equations as $$expr$$', () => {
 		const rt = [{ type: 'equation', equation: { expression: 'E=mc^2' }, annotations: {} }];
 		expect(richTextToMarkdown(rt as any)).toBe('$$E=mc^2$$');
@@ -249,6 +271,72 @@ describe('blocksToMarkdown (blocks-to-markdown)', () => {
 		const md = await blocksToMarkdown(blocks, noChildren);
 		expect(md).toContain('# Title');
 		expect(md).toContain('## Subtitle');
+	});
+
+	describe('leading whitespace never makes a code block', () => {
+		const text = (content: string, annotations = {}) => ({ type: 'text', text: { content }, annotations });
+		const para = (id: string, ...rich_text: any[]) => ({ id, type: 'paragraph', paragraph: { rich_text }, has_children: false });
+
+		it('drops a first-line indent: a tab or four spaces after a blank line is an indented code block', async () => {
+			const md = await blocksToMarkdown(
+				[para('a', text('First.')), para('b', text('\tTab indent.')), para('c', text('    Space indent.'))],
+				noChildren,
+			);
+			expect(md).toBe('First.\n\nTab indent.\n\nSpace indent.');
+		});
+
+		it('drops the indent after a soft line break too, and after an emphasis run moved it outside', async () => {
+			const md = await blocksToMarkdown(
+				[para('a', text('Line one.\n\n\tLine two.')), para('b', text('\tItalic.', { italic: true }))],
+				noChildren,
+			);
+			expect(md).toBe('Line one.\n\nLine two.\n\n_Italic._');
+		});
+
+		it('drops it inside quotes and list items, where it would also start code', async () => {
+			const md = await blocksToMarkdown(
+				[
+					{ id: 'q', type: 'quote', quote: { rich_text: [text('Quote.\n\n    indented')] }, has_children: false },
+					{ id: 'l', type: 'bulleted_list_item', bulleted_list_item: { rich_text: [text('    item')] }, has_children: false },
+				],
+				noChildren,
+			);
+			expect(md).toBe('> Quote.\n> \n> indented\n\n- item');
+		});
+	});
+
+	describe('children of blocks markdown cannot nest', () => {
+		const para = (id: string, content: string, has_children = false) => ({
+			id,
+			type: 'paragraph',
+			paragraph: { rich_text: [{ type: 'text', text: { content }, annotations: {} }] },
+			has_children,
+		});
+
+		it('keeps a paragraph indented under another with Tab, as the next block (it used to vanish)', async () => {
+			const children: Record<string, any[]> = { parent: [para('child', 'Child.')] };
+			const md = await blocksToMarkdown(
+				[para('parent', 'Parent.', true), para('after', 'After.')],
+				async (id) => children[id] ?? [],
+			);
+			expect(md).toBe('Parent.\n\nChild.\n\nAfter.');
+		});
+
+		it('keeps an empty parent paragraph out of the output but not its children', async () => {
+			const md = await blocksToMarkdown([para('parent', '', true)], async () => [para('child', 'Child.')]);
+			expect(md).toBe('Child.');
+		});
+
+		it('keeps the section inside a toggle heading', async () => {
+			const heading = {
+				id: 'h',
+				type: 'heading_2',
+				heading_2: { rich_text: [{ type: 'text', text: { content: 'Section' }, annotations: {} }], is_toggleable: true },
+				has_children: true,
+			};
+			const md = await blocksToMarkdown([heading], async () => [para('c', 'Body.')]);
+			expect(md).toBe('## Section\n\nBody.');
+		});
 	});
 
 	it('equation round-trip: Notion equation block → markdown → Notion equation block', async () => {

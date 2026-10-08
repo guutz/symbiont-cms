@@ -66,9 +66,21 @@ function serializeRichText(rt: NotionRichText): string {
 	// Code first because backticks suppress other formatting inside them
 	if (a.code) return `\`${text}\``;
 
-	if (a.strikethrough) text = `~~${text}~~`;
-	if (a.bold) text = `**${text}**`;
-	if (a.italic) text = `_${text}_`;
+	// Whitespace at the edges of a formatted run goes OUTSIDE the markers.
+	// CommonMark only closes `_x_` / `**x**` / `~~x~~` when the closing marker
+	// is not preceded by whitespace (and only opens one not followed by it), so
+	// `_Coffeehouse. _` renders as literal underscores. Notion makes such runs
+	// all the time: italicising a word with a double-click takes the space
+	// after it.
+	if (a.strikethrough || a.bold || a.italic) {
+		const [, lead, core, trail] = /^(\s*)([^]*?)(\s*)$/.exec(text)!;
+		if (!core) return text; // nothing visible to format
+		text = core;
+		if (a.strikethrough) text = `~~${text}~~`;
+		if (a.bold) text = `**${text}**`;
+		if (a.italic) text = `_${text}_`;
+		text = `${lead}${text}${trail}`;
+	}
 	// underline has no standard markdown equivalent — emit as plain
 
 	// Apply link (outermost wrapper)
