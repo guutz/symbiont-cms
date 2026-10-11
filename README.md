@@ -12,19 +12,39 @@ It syncs content from Notion into Supabase, gives you typed query helpers for yo
 
 ## Installation
 
-```bash
-pnpm add symbiont-cms
-```
-
-For tag-based GitHub installs:
+Symbiont is not on npm. Install it from a release tag on GitHub:
 
 ```bash
-pnpm add github:guutz/symbiont-cms#v1.0.0
+pnpm add github:guutz/symbiont-cms#v1.3.1
 ```
+
+pnpm refuses to install git-hosted packages until their build is approved,
+even though this one has no build script. Approve it in `pnpm-workspace.yaml`,
+using the repository form so the entry survives new tags:
+
+```yaml
+allowBuilds:
+  symbiont-cms@git+https://github.com/guutz/symbiont-cms.git: true
+```
+
+Requires Node 22.17 or later.
 
 ## Quick start
 
-Create a query client once in your app.
+The examples use SvelteKit 3, where `$lib` is replaced by a subpath import
+declared in `package.json` (imports need their file extension):
+
+```json
+"imports": {
+  "#lib/*": "./src/lib/*"
+}
+```
+
+On SvelteKit 2, write `$lib/symbiont` instead of `#lib/symbiont.ts`.
+
+Create a query client once in your app. It is imported by browser code too,
+so give it values that exist there: the Supabase URL and publishable key are
+public by design and can simply be written in.
 
 ```ts
 // src/lib/symbiont.ts
@@ -32,13 +52,13 @@ import { createSymbiontClient } from 'symbiont-cms';
 
 export const symbiont = createSymbiontClient({
   supabase: {
-    url: process.env.PUBLIC_SUPABASE_URL!,
-    publishableKey: process.env.PUBLIC_SUPABASE_ANON_KEY!
+    url: 'https://your-project.supabase.co',
+    publishableKey: 'sb_publishable_...'
   },
   databases: [
     {
       alias: 'blog',
-      dataSourceId: process.env.NOTION_DATABASE_ID!
+      dataSourceId: 'your-notion-data-source-id'
     }
   ]
 });
@@ -48,7 +68,7 @@ Use it in server load functions.
 
 ```ts
 // src/routes/[slug]/+page.server.ts
-import { symbiont } from '$lib/symbiont';
+import { symbiont } from '#lib/symbiont.ts';
 
 export const load = async ({ params, fetch }) => {
   const post = await symbiont.getPageBySlug(params.slug, { fetch, alias: 'blog' });
@@ -61,11 +81,44 @@ Use sync handlers in API routes.
 ```ts
 // src/routes/api/sync/+server.ts
 import { handlePollBlogRequest } from 'symbiont-cms/server';
-import { symbiont } from '$lib/symbiont';
-import { symbiontSync } from '$lib/symbiont.server';
+import { symbiontSync } from '#lib/symbiont.server.ts';
 
 export const GET = (event) => handlePollBlogRequest(symbiontSync, event);
 ```
+
+Give symbiont the app's secrets. The server reads `NOTION_TOKEN`,
+`SUPABASE_SERVICE_ROLE_KEY`, `CRON_SECRET` and `NOTION_WEBHOOK_SECRET` with
+`process.env` as a fallback, but Vite's dev server does not put `.env` there,
+so hand it SvelteKit's env once at startup. On SvelteKit 3, declare the
+variables in `src/env.ts`:
+
+```ts
+// src/env.ts
+import { defineEnvVars } from '@sveltejs/kit/env';
+
+// Kit validates declared variables at startup, and one without a schema is
+// required: a single missing secret would take the whole site down. Optional
+// keeps symbiont's behaviour, where it only breaks the endpoint that needs it.
+const optional = (value: string | undefined) => value || undefined;
+
+export const variables = defineEnvVars({
+  NOTION_TOKEN: { schema: optional },
+  SUPABASE_SERVICE_ROLE_KEY: { schema: optional },
+  CRON_SECRET: { schema: optional },
+  NOTION_WEBHOOK_SECRET: { schema: optional }
+});
+```
+
+```ts
+// src/hooks.server.ts
+import * as env from '$app/env/private';
+import { setEnvSource } from 'symbiont-cms/server';
+
+setEnvSource(env);
+```
+
+On SvelteKit 2: `import { env } from '$env/dynamic/private'` and
+`setEnvSource(env)`.
 
 Define sync behavior separately (slot-first config + hook sugar escape hatch).
 
@@ -106,13 +159,13 @@ import { createSymbiontClient } from 'symbiont-cms';
 
 export const symbiont = createSymbiontClient({
   supabase: {
-    url: process.env.PUBLIC_SUPABASE_URL!,
-    publishableKey: process.env.PUBLIC_SUPABASE_ANON_KEY!
+    url: 'https://your-project.supabase.co',
+    publishableKey: 'sb_publishable_...'
   },
   databases: [
     {
       alias: 'blog',
-      dataSourceId: process.env.NOTION_DATABASE_ID!
+      dataSourceId: 'your-notion-data-source-id'
     }
   ]
 });
@@ -129,45 +182,30 @@ import { createSymbiontClient } from 'symbiont-cms';
 
 export const symbiont = createSymbiontClient({
   supabase: {
-    url: process.env.PUBLIC_SUPABASE_URL!,
-    publishableKey: process.env.PUBLIC_SUPABASE_ANON_KEY!
+    url: 'https://your-project.supabase.co',
+    publishableKey: 'sb_publishable_...'
   },
 
   databases: [
     {
       alias: 'blog',
-      dataSourceId: process.env.NOTION_DATABASE_ID!
+      dataSourceId: 'your-notion-data-source-id'
     }
   ],
 
+  // Server-side rendering options for renderMarkdownToHtml. Footnotes,
+  // ==highlights==, ||spoilers||, KaTeX math ($$...$$), abbreviations,
+  // attributes and figures are always on.
   markdown: {
-    math: {
-      enabled: true,
-      inlineDelimiters: ['$$', '$$'],
-      displayDelimiters: ['$$', '$$']
-    },
     toc: {
-      enabled: true,
       minHeadingLevel: 2,
       maxHeadingLevel: 4
     },
     extensions: {
-      footnotes: true,
-      spoilers: true,
-      highlights: true,
-      textColors: true,
-      gfm: true
+      textColors: true // {red}(text)
     },
     images: {
       lazy: true
-    }
-  },
-
-  caching: {
-    strategy: 'isr', // 'isr' | 'none'
-    isr: {
-      enabled: true,
-      revalidate: 300
     }
   }
 });
@@ -192,13 +230,11 @@ export const symbiontSync = createSymbiontServer(symbiont, {
     summaryProperty: 'Summary',
     coverProperty: 'Cover',
 
-    // Content source behavior
-    contentSourceRule: 'NOTION',
-
-    // Notion write-back strategy
-    syncStrategy: 'patch',
-    forceFullReplaceThreshold: 0.6,
-    syncBackToNotion: { content: true, properties: true },
+    // Writing back to Notion during a sync (slug, cover, custom property
+    // hooks; `content` writes processed markdown back into the page body)
+    syncBackToNotion: { content: false, properties: true },
+    syncStrategy: 'patch', // or 'replace': how content write-back edits blocks
+    forceFullReplaceThreshold: 0.6, // patch falls back to replace above this
 
     // Named slots (hook sugar)
     shouldSync: () => true,
@@ -215,8 +251,11 @@ export const symbiontSync = createSymbiontServer(symbiont, {
 
 ## Exports
 
-- `symbiont-cms`: client APIs, types, optional Svelte components
-- `symbiont-cms/server`: sync handlers and server-only utilities
+- `symbiont-cms`: client APIs and types. Safe to import in browser code.
+- `symbiont-cms/server`: sync handlers and server-only utilities.
+
+Neither imports anything from SvelteKit, so both also load in plain Node
+(scripts, tests).
 
 ## Migration (Major)
 
@@ -230,7 +269,7 @@ This release intentionally introduces breaking API changes.
   - `shouldSync`, `isPublished`, `publishDate`, `addMetadata`, `transformContent`
 - Use `hooks` as the event-level escape hatch for side effects and uncommon events
 - Slot + hook on the same underlying event is disallowed and throws at config resolution
-- Use `on(EVENTS.someEvent, fn)` for typed hook sugar when writing custom hooks
+- Use `on('content:sync', fn, { name })` (event names are type-checked) for hook sugar when writing custom hooks
 
 ## Development
 

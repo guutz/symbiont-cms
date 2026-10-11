@@ -10,14 +10,15 @@
  *
  * TRADE-OFF, on purpose: `process.env` does not exist in the browser, and Vite
  * only statically replaces `import.meta.env`. So this resolves values in Node
- * (SSR, sync jobs, scripts) and returns nothing client-side. SvelteKit apps that
- * need a public var in browser code should import it from `$env/static/public`
- * themselves and pass it into `createSymbiontClient`, which is what
- * new-california-tech does.
+ * (SSR, sync jobs, scripts) and returns nothing client-side. An app that needs
+ * a public value in browser code should pass it into `createSymbiontClient`
+ * itself: from its framework's public env (SvelteKit 3: `$app/env/public`,
+ * declared in `src/env.ts`), or simply as a literal -- the Supabase URL and
+ * publishable key are public by design, and both new-california-tech and
+ * guutz.com write them directly in `src/lib/symbiont.ts`.
  *
- * NOTE: `src/lib/server/utils/env.ts` still imports `$env/dynamic/private`, so
- * the SvelteKit decoupling is only half done. Anything importing the server env
- * helper still requires a Vite context.
+ * The server half (`src/lib/server/utils/env.ts`) is decoupled the same way:
+ * it reads `process.env` plus whatever the app hands to `setEnvSource`.
  */
 export function requirePublicEnvVar(name: string, hint?: string): string {
 	const value = readEnv(name);
