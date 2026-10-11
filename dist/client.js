@@ -9,12 +9,13 @@ const PAGES_TABLE = 'pages';
  * ```ts
  * // src/lib/symbiont.ts
  * import { createSymbiontClient } from 'symbiont-cms';
- * import { PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY } from '$env/static/public';
  *
+ * // Public by design, and this module also runs in the browser, so write them
+ * // in (or pass values from your framework's public env).
  * export const symbiont = createSymbiontClient({
  *   supabase: {
- *     url: PUBLIC_SUPABASE_URL,
- *     publishableKey: PUBLIC_SUPABASE_ANON_KEY
+ *     url: 'https://your-project.supabase.co',
+ *     publishableKey: 'sb_publishable_...'
  *   },
  *   databases: [
  *     {
@@ -25,9 +26,10 @@ const PAGES_TABLE = 'pages';
  * });
  * ```
  *
- * Then import and use it anywhere:
+ * Then import and use it anywhere (SvelteKit 3 subpath import; on Kit 2,
+ * `$lib/symbiont`):
  * ```ts
- * import { symbiont } from '$lib/symbiont';
+ * import { symbiont } from '#lib/symbiont.ts';
  *
  * // In +page.server.ts
  * export const load = async ({ params, fetch }) => {
@@ -79,8 +81,8 @@ export function createSymbiontClient(config) {
             const sourceAlias = resolveAlias(options.alias);
             const { data, error } = await client.from(PAGES_TABLE)
                 .select('*')
-                .like('datasource_alias', sourceAlias)
-                .like('slug', slug)
+                .eq('datasource_alias', sourceAlias)
+                .eq('slug', slug)
                 .maybeSingle();
             if (error) {
                 throw new Error(`Query error: ${error.message}`);
@@ -94,7 +96,7 @@ export function createSymbiontClient(config) {
             const limit = options.limit ?? 100;
             const { data, error } = await client.from(PAGES_TABLE)
                 .select('*')
-                .like('datasource_alias', sourceAlias)
+                .eq('datasource_alias', sourceAlias)
                 .order('publish_at', { ascending: false })
                 .range(offset, offset + limit - 1);
             if (error) {

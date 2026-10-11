@@ -129,10 +129,10 @@ export interface DatabaseBlueprint {
     /** Cover image property name (files property) */
     coverProperty?: string | null;
     /**
-     * Determines sync direction for content
-     * - 'NOTION': Notion → DB (current behavior)
-     * - 'WEB_EDITOR': DB → Notion (when Tiptap implemented)
-     * - Custom function for per-page logic
+     * @deprecated Not read by symbiont; setting it has no effect. To let
+     * something other than Notion own a page's body, return false from a
+     * `content:should-sync` hook (v1.3.0): the content pipeline is skipped
+     * and the upsert leaves `content` alone.
      */
     contentSourceRule?: 'NOTION' | 'WEB_EDITOR' | ((page: PageObjectResponse) => 'NOTION' | 'WEB_EDITOR');
     /**
@@ -190,26 +190,39 @@ export interface SymbiontConfig {
     databases: DatabaseBlueprint[];
     /** PRIVATE: Markdown rendering options that control server-side parsing. */
     markdown?: MarkdownConfig;
-    /** PRIVATE: Response caching strategy (e.g. ISR). */
+    /**
+     * @deprecated Not read by symbiont; setting it has no effect. Caching is
+     * the app's job (cache-control headers, or the adapter's ISR options).
+     */
     caching?: CachingConfig;
 }
 /** Markdown configuration block from symbiont config */
 export interface MarkdownConfig {
+    /**
+     * @deprecated Not read: KaTeX math (`$$...$$`) is always on, and the
+     * delimiters are fixed.
+     */
     math?: {
         enabled: boolean;
         inlineDelimiters?: [string, string];
         displayDelimiters?: [string, string];
     };
     toc?: {
+        /** Not read: the TOC is always built. Only the heading levels apply. */
         enabled: boolean;
         minHeadingLevel?: number;
         maxHeadingLevel?: number;
     };
     extensions?: {
+        /** @deprecated Not read: footnotes are always on. */
         footnotes?: boolean;
+        /** @deprecated Not read: `||spoilers||` are always on. */
         spoilers?: boolean;
+        /** @deprecated Not read: `==highlights==` are always on. */
         highlights?: boolean;
+        /** `{red}(text)` coloured text. Off unless true. */
         textColors?: boolean;
+        /** @deprecated Not read: GFM tables and strikethrough are always on. */
         gfm?: boolean;
     };
     images?: {
@@ -278,8 +291,8 @@ export interface PrintLayoutTarget {
 }
 /**
  * This interface represents the final, merged layout object.
- * Your Svelte code (like the +page.server.js) will produce this
- * by merging the defaults with the partial front matter.
+ * The app (typically a server load function) produces it by merging the
+ * defaults with the partial front matter.
  */
 export interface LayoutConfig {
     weight: number;
