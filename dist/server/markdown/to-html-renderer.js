@@ -117,49 +117,19 @@ export async function renderMarkdownToHtml(content, config) {
         const href = token.attrGet('src');
         return defaultImageRender(tokens, idx, options, env, self);
     };
-    // Custom link renderer with email mangling
-    const defaultLinkOpen = md.renderer.rules.link_open ||
-        ((tokens, idx, options, env, self) => self.renderToken(tokens, idx, options));
-    // markdown-it 15 widened Token.attrGet()'s return type from `string | null` to
-    // `string | number | null`, so the value has to be narrowed before any string
-    // method is called on it.
-    const getHrefString = (token) => {
-        const value = token.attrGet('href');
-        return typeof value === 'string' ? value : null;
-    };
-    md.renderer.rules.link_open = function (tokens, idx, options, env, self) {
-        const token = tokens[idx];
-        const href = getHrefString(token);
-        // Mangle mailto links to prevent email harvesting
-        if (href && href.startsWith('mailto:')) {
-            const mangledHref = mangleString(href);
-            token.attrSet('href', mangledHref);
-        }
-        return defaultLinkOpen(tokens, idx, options, env, self);
-    };
-    // Also mangle the email text content in link_close
+    // Plain text. The default rule only escapes; this one escapes too, then
+    // applies the {color}(text) syntax when it is enabled.
+    //
+    // There used to be email "mangling" here: mailto hrefs and their link text
+    // rewritten as random &#...; character references. It broke every mailto
+    // link -- the href went through attrSet, so markdown-it escaped the `&`s
+    // again and the browser saw `&amp;#116;...` -- and the replacement text rule
+    // returned content UNESCAPED, so any literal `<` in text became markup.
+    // Harvest protection is not worth either; addresses are rendered as written.
     md.renderer.rules.text = function (tokens, idx) {
-        const token = tokens[idx];
-        let content = token.content;
-        // Check if this text is inside a mailto link by looking at surrounding tokens
-        // Look backwards for link_open with mailto
-        for (let i = idx - 1; i >= 0; i--) {
-            if (tokens[i].type === 'link_open') {
-                const href = getHrefString(tokens[i]);
-                if (href && href.startsWith('mailto:')) {
-                    // This text is inside a mailto link, mangle it
-                    content = mangleString(content);
-                }
-                break;
-            }
-            if (tokens[i].type === 'link_close') {
-                // We've gone past the current link
-                break;
-            }
-        }
-        // Handle custom text color syntax {color}(text)
+        const content = escapeHtml(tokens[idx].content);
         if (config?.extensions?.textColors && /\{[a-z]+\}\(/.test(content)) {
-            content = parseTextColor(content);
+            return parseTextColor(content);
         }
         return content;
     };
@@ -218,24 +188,6 @@ function escapeHtml(html) {
     return html.replace(/[&<>"']/g, (c) => {
         return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] || c;
     });
-}
-/**
- * Mangle string by converting characters to HTML character references
- * This helps prevent email harvesting bots from collecting addresses
- */
-function mangleString(text) {
-    let result = '';
-    for (let i = 0; i < text.length; i++) {
-        const char = text.charCodeAt(i);
-        // Randomly use decimal or hex encoding for obfuscation
-        if (Math.random() > 0.5) {
-            result += `&#${char};`;
-        }
-        else {
-            result += `&#x${char.toString(16)};`;
-        }
-    }
-    return result;
 }
 /**
  * Renders markdown summary to plain text by stripping all formatting and HTML.
