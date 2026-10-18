@@ -13,8 +13,12 @@ vi.mock('@notionhq/client', () => ({
 vi.mock('./sync/coordinator.js', () => ({
 	createNotionToDatabaseSyncCoordinator: (...args: any[]) => createCoordinator(...args),
 }));
+const cleanupUnusedMedia = vi.fn(async (..._args: any[]) => ({ deleted: 0, deletedPaths: [], referencedCount: 0, totalInBucket: 0, dryRun: true }));
+vi.mock('./bucket/storage-cleanup.js', () => ({
+	cleanupUnusedMedia: (...args: any[]) => cleanupUnusedMedia(...args),
+}));
 
-const { syncPage } = await import('./webhook.js');
+const { syncPage, syncFromNotion } = await import('./webhook.js');
 const { setEnvSource } = await import('./utils/env.js');
 
 const client = {
@@ -61,5 +65,23 @@ describe('syncPage', () => {
 	it('refuses an unconfigured database before touching Notion', async () => {
 		await expect(syncPage(client, 'nope', 'p1')).rejects.toThrow(/not configured/);
 		expect(retrieve).not.toHaveBeenCalled();
+	});
+});
+
+describe('syncFromNotion media cleanup', () => {
+	beforeEach(() => {
+		setEnvSource({ SUPABASE_SERVICE_ROLE_KEY: 'test-key' });
+		cleanupUnusedMedia.mockClear();
+	});
+	afterEach(() => setEnvSource(null));
+
+	it("protects the server's media prefixes (this path once passed none)", async () => {
+		const server = {
+			config: { supabase: { url: 'http://localhost', publishableKey: 'anon' }, databases: [] },
+			media: { protectedPrefixes: ['submissions/', 'legacy/'] },
+		} as any;
+		await syncFromNotion(server, { cleanupOnly: true, cleanupDryRun: true });
+		expect(cleanupUnusedMedia).toHaveBeenCalledTimes(1);
+		expect(cleanupUnusedMedia.mock.calls[0][1]).toEqual({ dryRun: true, excludePrefixes: ['submissions/', 'legacy/'] });
 	});
 });

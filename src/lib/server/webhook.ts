@@ -9,7 +9,7 @@ import { createClient } from '@supabase/supabase-js';
 import type { Database } from '../database.types.js';
 import { cleanupUnusedMedia, type MediaCleanupResult } from './bucket/storage-cleanup.js';
 import type { Hook } from '../hooks/types.js';
-import { resolveSyncDatabase } from './sync-client.js';
+import { resolveSyncDatabase, type SymbiontSyncServer } from './sync-client.js';
 
 /**
  * The parts of a request this module actually uses.
@@ -132,7 +132,14 @@ export async function syncFromNotion(
 	let mediaCleanup: MediaCleanupResult | undefined;
 	if (options.cleanupMedia || options.cleanupOnly) {
 		try {
-			mediaCleanup = await cleanupUnusedMedia(adminSupabase, { dryRun: options.cleanupDryRun });
+			// The app's protected prefixes (createSymbiontServer's media option).
+			// This path once ran with no exclusions at all, so a manual
+			// ?cleanup=true would have deleted every image in an unsent draft.
+			const protectedPrefixes = (client as Partial<SymbiontSyncServer>).media?.protectedPrefixes ?? [];
+			mediaCleanup = await cleanupUnusedMedia(adminSupabase, {
+				dryRun: options.cleanupDryRun,
+				excludePrefixes: protectedPrefixes
+			});
 			logger.info({ event: 'media_cleanup_complete', ...mediaCleanup });
 		} catch (err: any) {
 			logger.error({ event: 'media_cleanup_failed', error: err?.message });

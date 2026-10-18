@@ -49,8 +49,23 @@ export interface ResolvedSyncDatabase {
 	hooks: Hook[];
 }
 
+/** Server-wide settings that are not per database. */
+export interface SymbiontServerOptions {
+	media?: {
+		/**
+		 * Media bucket path prefixes that `cleanupUnusedMedia` must never
+		 * delete, on top of its built-in `issues/`. For uploads no page
+		 * references yet, e.g. images in a draft that has not been submitted.
+		 * Applied by every cleanup symbiont runs (the poll handler's
+		 * `?cleanup=true`); callers of cleanupUnusedMedia pass their own.
+		 */
+		protectedPrefixes?: string[];
+	};
+}
+
 export interface SymbiontSyncServer extends SymbiontClient {
 	syncConfigByAlias: SyncConfigMap;
+	media?: SymbiontServerOptions['media'];
 }
 
 const SLOT_EVENT_MAP: Record<keyof SyncSlotConfig, HookEvent> = {
@@ -202,7 +217,11 @@ export function resolveSyncDatabase(
  *
  * Keys must match configured database aliases.
  */
-export function createSymbiontServer(client: SymbiontClient, syncConfigByAlias: SyncConfigMap): SymbiontSyncServer {
+export function createSymbiontServer(
+	client: SymbiontClient,
+	syncConfigByAlias: SyncConfigMap,
+	options: SymbiontServerOptions = {}
+): SymbiontSyncServer {
 	const configuredAliases = new Set(client.config.databases.map((db) => db.alias));
 	for (const [alias, syncConfig] of Object.entries(syncConfigByAlias)) {
 		if (!configuredAliases.has(alias)) {
@@ -217,6 +236,7 @@ export function createSymbiontServer(client: SymbiontClient, syncConfigByAlias: 
 
 	return {
 		...client,
-		syncConfigByAlias
+		syncConfigByAlias,
+		media: options.media
 	};
 }
