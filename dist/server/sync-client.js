@@ -112,7 +112,7 @@ export function resolveSyncDatabase(client, queryDatabase) {
  *
  * Keys must match configured database aliases.
  */
-export function createSymbiontServer(client, syncConfigByAlias) {
+export function createSymbiontServer(client, syncConfigByAlias, options = {}) {
     const configuredAliases = new Set(client.config.databases.map((db) => db.alias));
     for (const [alias, syncConfig] of Object.entries(syncConfigByAlias)) {
         if (!configuredAliases.has(alias)) {
@@ -124,7 +124,8 @@ export function createSymbiontServer(client, syncConfigByAlias) {
     }
     return {
         ...client,
-        syncConfigByAlias
+        syncConfigByAlias,
+        media: options.media
     };
 }
 //# sourceMappingURL=sync-client.js.map

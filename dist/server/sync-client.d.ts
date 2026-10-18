@@ -43,8 +43,22 @@ export interface ResolvedSyncDatabase {
     config: DatabaseBlueprint;
     hooks: Hook[];
 }
+/** Server-wide settings that are not per database. */
+export interface SymbiontServerOptions {
+    media?: {
+        /**
+         * Media bucket path prefixes that `cleanupUnusedMedia` must never
+         * delete, on top of its built-in `issues/`. For uploads no page
+         * references yet, e.g. images in a draft that has not been submitted.
+         * Applied by every cleanup symbiont runs (the poll handler's
+         * `?cleanup=true`); callers of cleanupUnusedMedia pass their own.
+         */
+        protectedPrefixes?: string[];
+    };
+}
 export interface SymbiontSyncServer extends SymbiontClient {
     syncConfigByAlias: SyncConfigMap;
+    media?: SymbiontServerOptions['media'];
 }
 /**
  * Typed helper for large per-database sync config objects.
@@ -68,6 +82,6 @@ export declare function resolveSyncDatabase(client: SymbiontClient, queryDatabas
  *
  * Keys must match configured database aliases.
  */
-export declare function createSymbiontServer(client: SymbiontClient, syncConfigByAlias: SyncConfigMap): SymbiontSyncServer;
+export declare function createSymbiontServer(client: SymbiontClient, syncConfigByAlias: SyncConfigMap, options?: SymbiontServerOptions): SymbiontSyncServer;
 export {};
 //# sourceMappingURL=sync-client.d.ts.map

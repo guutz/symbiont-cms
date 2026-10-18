@@ -1,8 +1,14 @@
 /**
  * Media storage cleanup utilities.
  *
- * Scans the `media` bucket and deletes any file that is not referenced by
- * any row in the `pages` table (in either `content` markdown or `cover` URL).
+ * Scans the `media` bucket and deletes any file that is not referenced by any
+ * row in the `pages` table -- in `content`, `cover`, `summary` or anywhere in
+ * `meta`.
+ *
+ * It used to read `content` and `cover` only. Apps keep media URLs in `meta`
+ * too (an archive cover, a PDF thumbnail) and summaries can carry images, so
+ * those files looked unreferenced and would have been deleted while live. Err
+ * towards keeping: a stray file costs storage, a wrong deletion breaks a page.
  *
  * Should be run after a full sync — never during incremental/per-page syncs
  * because partial runs don't have a complete picture of what's in use.
@@ -18,15 +24,27 @@ import { createLogger } from '../utils/logger.js';
  *   .../media/abc123def456.jpg         → "abc123def456.jpg"
  *   .../media/page-uuid/abc123.jpg     → "page-uuid/abc123.jpg"
  */
-const MEDIA_PATH_RE = /\/media\/([^?#\s"')]+)/g;
+const MEDIA_PATH_RE = /\/media\/([^?#\s"')<>\\]+)/g;
 /**
- * Collect all media filenames referenced in a string (markdown content or bare URL).
+ * Collect all media paths referenced in a string (markdown, a bare URL, or
+ * serialised JSON).
+ *
+ * Both the path as written and its URL-decoded form are kept: markdown has to
+ * percent-encode a space or parenthesis in a file name, but the object is
+ * stored under the decoded name, and comparing only the encoded form would
+ * delete it.
  */
-function extractReferencedPaths(text, out) {
+export function extractReferencedPaths(text, out) {
     MEDIA_PATH_RE.lastIndex = 0;
     let match;
     while ((match = MEDIA_PATH_RE.exec(text)) !== null) {
         out.add(match[1]);
+        try {
+            out.add(decodeURIComponent(match[1]));
+        }
+        catch {
+            // Malformed escape: the raw form is all there is.
+        }
     }
 }
 /**
@@ -72,7 +90,10 @@ async function listAllMediaPaths(supabase, prefix = '', logger) {
  * Handles both the legacy `{pageId}/{filename}` layout and the current flat layout.
  *
  * Files under `issues/` are always excluded — those are explicitly-pathed uploads
- * (e.g. issue PDFs) that are not referenced via content or cover URLs.
+ * (e.g. issue PDFs) that are not referenced via content or cover URLs. Apps add
+ * their own (uploads that no page references yet, like an unsent draft's
+ * images) through `excludePrefixes`, or once for every caller through
+ * `createSymbiontServer(..., { media: { protectedPrefixes } })`.
  *
  * @param supabase - Service role Supabase client (needs storage delete + pages read)
  * @param options.dryRun - When true, compute the unreferenced set but skip deletion.
@@ -110,7 +131,7 @@ export async function cleanupUnusedMedia(supabase, options = {}) {
     while (true) {
         const { data: pages, error: pagesError } = await supabase
             .from('pages')
-            .select('content, cover')
+            .select('content, cover, summary, meta')
             .range(pageOffset, pageOffset + PAGE_SIZE - 1);
         if (pagesError) {
             throw new Error(`Failed to query pages for media references: ${pagesError.message}`);
@@ -123,6 +144,10 @@ export async function cleanupUnusedMedia(supabase, options = {}) {
                 extractReferencedPaths(page.content, referencedPaths);
             if (page.cover)
                 extractReferencedPaths(page.cover, referencedPaths);
+            if (page.summary)
+                extractReferencedPaths(page.summary, referencedPaths);
+            if (page.meta)
+                extractReferencedPaths(JSON.stringify(page.meta), referencedPaths);
         }
         logger.debug({ event: 'pages_batch_scanned', offset: pageOffset, count: pages.length });
         if (pages.length < PAGE_SIZE)

@@ -75,7 +75,14 @@ export async function syncFromNotion(client, options = {}) {
     let mediaCleanup;
     if (options.cleanupMedia || options.cleanupOnly) {
         try {
-            mediaCleanup = await cleanupUnusedMedia(adminSupabase, { dryRun: options.cleanupDryRun });
+            // The app's protected prefixes (createSymbiontServer's media option).
+            // This path once ran with no exclusions at all, so a manual
+            // ?cleanup=true would have deleted every image in an unsent draft.
+            const protectedPrefixes = client.media?.protectedPrefixes ?? [];
+            mediaCleanup = await cleanupUnusedMedia(adminSupabase, {
+                dryRun: options.cleanupDryRun,
+                excludePrefixes: protectedPrefixes
+            });
             logger.info({ event: 'media_cleanup_complete', ...mediaCleanup });
         }
         catch (err) {

@@ -2,7 +2,7 @@ export * from './index.js';
 export { handlePollBlogRequest, handleNotionWebhookRequest, syncFromNotion, syncPage } from './server/webhook.js';
 export type { SyncFromNotionResult } from './server/webhook.js';
 export { createSymbiontServer, defineDatabase, resolveSyncDatabase } from './server/sync-client.js';
-export type { SymbiontSyncServer, SyncConfigMap, SyncDatabaseConfig, SyncSlotConfig } from './server/sync-client.js';
+export type { SymbiontSyncServer, SymbiontServerOptions, SyncConfigMap, SyncDatabaseConfig, SyncSlotConfig } from './server/sync-client.js';
 export { on } from './server/hook-sugar.js';
 export { cleanupUnusedMedia } from './server/bucket/storage-cleanup.js';
 export type { MediaCleanupResult } from './server/bucket/storage-cleanup.js';
