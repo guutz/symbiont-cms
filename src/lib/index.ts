@@ -11,6 +11,8 @@ export type {
 	TocItem,
 	SyncResult,
 	SymbiontConfig,
+	MarkdownConfig,
+	EmbedProvider,
 	DatabaseBlueprint,
 	HydratedDatabaseConfig,
 	HydratedSymbiontConfig,

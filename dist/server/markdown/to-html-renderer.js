@@ -134,6 +134,9 @@ export async function renderMarkdownToHtml(content, config) {
         return content;
     };
     // Parse with markdown-it (plugins handle footnotes now)
+    if (config?.embeds?.length) {
+        md.core.ruler.push('symbiont_embeds', (state) => replaceStandaloneLinks(state, config.embeds));
+    }
     const html = md.render(content);
     return { html, toc };
 }
@@ -179,6 +182,70 @@ function addToTOC(toc, level, heading, slugUrl) {
     else {
         toc.push(item);
     }
+}
+/**
+ * Replace each paragraph whose only content is one link with the first
+ * provider's embed HTML. Runs after inline parsing, so `[text](url)` and a
+ * linkified bare URL look the same here. Hidden paragraphs (tight list items)
+ * are left alone: an embed inside a bullet is almost certainly not intended.
+ */
+function replaceStandaloneLinks(state, providers) {
+    const tokens = state.tokens;
+    for (let i = 0; i + 2 < tokens.length; i++) {
+        const [open, inline, close] = [tokens[i], tokens[i + 1], tokens[i + 2]];
+        if (open.type !== 'paragraph_open' || open.hidden || inline.type !== 'inline' || close.type !== 'paragraph_close') {
+            continue;
+        }
+        const href = standaloneLinkHref(inline.children ?? []);
+        const url = href ? parseHttpUrl(href) : null;
+        if (!url)
+            continue;
+        const html = renderEmbed(providers, url);
+        if (!html)
+            continue;
+        const token = new state.Token('html_block', '', 0);
+        token.content = `${html}\n`;
+        token.block = true;
+        token.map = open.map;
+        tokens.splice(i, 3, token);
+    }
+}
+/** The href if the inline children are exactly one link (ignoring whitespace). */
+function standaloneLinkHref(children) {
+    const meaningful = children.filter((c) => !(c.type === 'text' && !c.content.trim()) && c.type !== 'softbreak');
+    if (meaningful.length < 2)
+        return null;
+    const first = meaningful[0];
+    const last = meaningful[meaningful.length - 1];
+    if (first.type !== 'link_open' || last.type !== 'link_close')
+        return null;
+    // Exactly one link: no second link_open inside.
+    if (meaningful.slice(1, -1).some((c) => c.type === 'link_open'))
+        return null;
+    const href = first.attrGet('href');
+    return typeof href === 'string' ? href : null;
+}
+function parseHttpUrl(href) {
+    try {
+        const url = new URL(href);
+        return url.protocol === 'https:' || url.protocol === 'http:' ? url : null;
+    }
+    catch {
+        return null;
+    }
+}
+function renderEmbed(providers, url) {
+    for (const provider of providers) {
+        try {
+            const html = provider.render(url);
+            if (html)
+                return html;
+        }
+        catch {
+            // A broken provider must not take the article down; the link stays a link.
+        }
+    }
+    return null;
 }
 function parseTextColor(text) {
     // Parse {color}(text) syntax

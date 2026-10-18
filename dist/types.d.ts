@@ -228,6 +228,27 @@ export interface MarkdownConfig {
     images?: {
         lazy?: boolean;
     };
+    /**
+     * Embeds, in the order tried. A link that is the only thing in its
+     * paragraph -- `[text](url)` or a bare URL on its own line -- is offered to
+     * each provider; the first to return HTML replaces the paragraph.
+     *
+     * Standalone links rather than a new syntax, so the source stays portable
+     * markdown: a Notion embed block arrives as exactly such a link, and the
+     * same line typed anywhere else renders the same way.
+     */
+    embeds?: EmbedProvider[];
+}
+/**
+ * Turns a standalone link into embed HTML. The HTML is inserted as-is, so the
+ * provider is the security boundary: validate the URL strictly and build the
+ * markup from the parts you validated, never from the raw URL string.
+ */
+export interface EmbedProvider {
+    /** For logs and debugging. */
+    name: string;
+    /** HTML for this URL, or null to decline (the link renders as a link). */
+    render: (url: URL) => string | null;
 }
 export type CachingStrategy = 'isr' | 'none';
 export interface ISRConfig {
