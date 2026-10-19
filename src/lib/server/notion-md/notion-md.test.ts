@@ -180,6 +180,62 @@ describe('richTextToMarkdown (rich-text)', () => {
 		expect(richTextToMarkdown(both as any)).toBe(' _**~~both~~**_ ');
 	});
 
+	it('moves edge punctuation that touches a letter outside the markers', () => {
+		// A real caption. `Examiner_, Nov. 1, 1925. ..._` cannot open: a marker
+		// between a letter and a comma is not left-flanking, so both underscores
+		// printed.
+		const t = (content: string, italic = false, url?: string) => ({
+			type: 'text',
+			text: { content, link: url ? { url } : null },
+			annotations: { italic },
+		});
+		const rt = [
+			t('“Prophetess of the Blue Four,” ', true),
+			t('The San Francisco Examiner'),
+			t(', Nov. 1, 1925. A profile of Scheyer and her promotion of the Blue Four. ', true),
+			t('(Image: '),
+			t('The San Francisco Examiner', false, 'https://example.com/'),
+			t(')'),
+		];
+		expect(richTextToMarkdown(rt as any)).toBe(
+			'_“Prophetess of the Blue Four,”_ The San Francisco Examiner, _Nov. 1, 1925. A profile of Scheyer and ' +
+				'her promotion of the Blue Four._ (Image: [The San Francisco Examiner](https://example.com/))',
+		);
+
+		// Trailing punctuation before a letter, and bold the same way.
+		expect(richTextToMarkdown([t('Hello,', true), t('world')] as any)).toBe('_Hello_,world');
+		const bold = [
+			{ type: 'text', text: { content: 'see' }, annotations: {} },
+			{ type: 'text', text: { content: '(this)' }, annotations: { bold: true } },
+			{ type: 'text', text: { content: 'now' }, annotations: {} },
+		];
+		expect(richTextToMarkdown(bold as any)).toBe('see(**this**)now');
+	});
+
+	it('italicises with * inside a word, where _ cannot open', () => {
+		const rt = [
+			{ type: 'text', text: { content: 'un' }, annotations: {} },
+			{ type: 'text', text: { content: 'believ' }, annotations: { italic: true } },
+			{ type: 'text', text: { content: 'able' }, annotations: {} },
+		];
+		expect(richTextToMarkdown(rt as any)).toBe('un*believ*able');
+	});
+
+	it('renders those edge cases as emphasis, not literal markers', async () => {
+		const { renderMarkdownToHtml } = await import('../markdown/to-html-renderer.js');
+		const cases: Array<[string, string]> = [
+			['Examiner, _Nov. 1._ (Image)', '<em>Nov. 1.</em>'],
+			['un*believ*able', 'un<em>believ</em>able'],
+			['see(**this**)now', 'see(<strong>this</strong>)now'],
+			['_Hello_,world', '<em>Hello</em>,world'],
+		];
+		for (const [md, expected] of cases) {
+			const { html } = await renderMarkdownToHtml(md, undefined);
+			expect(html).toContain(expected);
+			expect(html).not.toMatch(/[_*]/);
+		}
+	});
+
 	it('leaves a formatted run that is only whitespace unformatted', () => {
 		const rt = [
 			{ type: 'text', text: { content: 'a' }, annotations: {} },

@@ -19,10 +19,24 @@ import { LIMITS } from './types.js';
  * only a single equation becomes a block equation; otherwise inline).
  */
 export function richTextToMarkdown(richTexts: NotionRichText[]): string {
-	return richTexts.map(rt => serializeRichText(rt)).join('');
+	let out = '';
+	richTexts.forEach((rt, i) => {
+		// Whether emphasis markers parse depends on the characters either side
+		// of them, which belong to the neighbouring runs.
+		const next = richTexts[i + 1];
+		const nextChar = (next?.plain_text ?? next?.text?.content ?? '').charAt(0);
+		out += serializeRichText(rt, out.slice(-1), nextChar);
+	});
+	return out;
 }
 
-function serializeRichText(rt: NotionRichText): string {
+/** A letter or digit: what makes a marker next to it "intraword". */
+const WORD_CHAR = /[\p{L}\p{N}]/u;
+/** Punctuation and symbols, as CommonMark's flanking rules count them, plus whitespace. */
+const EDGE_RUN_START = /^[\p{P}\p{S}\s]+/u;
+const EDGE_RUN_END = /[\p{P}\p{S}\s]+$/u;
+
+function serializeRichText(rt: NotionRichText, prevChar = '', nextChar = ''): string {
 	if (rt.type === 'equation') {
 		return `$$${rt.equation?.expression ?? ''}$$`;
 	}
@@ -72,13 +86,35 @@ function serializeRichText(rt: NotionRichText): string {
 	// `_Coffeehouse. _` renders as literal underscores. Notion makes such runs
 	// all the time: italicising a word with a double-click takes the space
 	// after it.
+	//
+	// Punctuation at an edge that touches a letter in the next run goes outside
+	// too, for the same reason: a marker between a letter and punctuation
+	// neither opens nor closes. Notion's `Examiner` + italic `, Nov. 1, 1925.`
+	// gave `Examiner_, Nov. 1, 1925._`, printed with both underscores. Moving
+	// the comma out costs only whether a comma is slanted.
+	//
+	// `_` cannot open or close inside a word at all (`un_believ_able`), so a
+	// run that starts or ends mid-word is italicised with `*`, which can.
 	if (a.strikethrough || a.bold || a.italic) {
-		const [, lead, core, trail] = /^(\s*)([^]*?)(\s*)$/.exec(text)!;
+		let [, lead, core, trail] = /^(\s*)([^]*?)(\s*)$/.exec(text)!;
+		if (!lead && WORD_CHAR.test(prevChar)) {
+			const edge = EDGE_RUN_START.exec(core)?.[0] ?? '';
+			lead = edge;
+			core = core.slice(edge.length);
+		}
+		if (!trail && WORD_CHAR.test(nextChar)) {
+			const edge = EDGE_RUN_END.exec(core)?.[0] ?? '';
+			trail = edge;
+			core = core.slice(0, core.length - edge.length);
+		}
 		if (!core) return text; // nothing visible to format
+		const intraword =
+			(!lead && WORD_CHAR.test(prevChar)) || (!trail && WORD_CHAR.test(nextChar));
+		const em = intraword ? '*' : '_';
 		text = core;
 		if (a.strikethrough) text = `~~${text}~~`;
 		if (a.bold) text = `**${text}**`;
-		if (a.italic) text = `_${text}_`;
+		if (a.italic) text = `${em}${text}${em}`;
 		text = `${lead}${text}${trail}`;
 	}
 	// underline has no standard markdown equivalent — emit as plain
